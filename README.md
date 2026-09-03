@@ -68,7 +68,7 @@ Sentinel only calls Docker's read-only `/info` and `/containers/json?all=1` endp
 
 ## Stage 4: Scheduled service monitoring
 
-The **Services** page adds scheduled HTTP/HTTPS, TCP-port, and DNS checks. Sentinel retains the latest 5,000 results in a local JSON data file, calculates recent uptime and response-time health scores, and restores monitor history after a restart.
+The **Services** page adds scheduled HTTP/HTTPS, TCP-port, and DNS checks. Sentinel retains results in a local JSON data file, calculates recent uptime and response-time health scores, and restores monitor history after a restart. Stage 7 adds configurable age and record-count limits.
 
 Simulation remains the default. Enable real outbound checks only after the Sentinel API is protected from unauthorized users:
 
@@ -128,6 +128,29 @@ Correlation is advisory only. Stage 6 does not restart workloads, alter Proxmox,
 - `GET /api/topology?simulate=false` builds a live graph from configured Proxmox and Docker connections.
 - `POST /api/topology/mappings` confirms a monitor-to-resource dependency.
 - `DELETE /api/topology/mappings/:id` removes a confirmed mapping and restores automatic inference.
+
+## Stage 7: Historical metrics and Prometheus export
+
+The **Metrics** page aggregates stored service checks into 1-hour, 6-hour, 24-hour, 7-day, and 30-day views. It displays overall availability, failures, average and P95 latency, plus a response-time chart for every monitor. Empty time buckets remain visible as gaps instead of being reported as successful checks.
+
+The default retention policy keeps up to 25,000 results for 30 days. Operators can select 1–365 days and a 1,000–100,000 record limit. Results exceeding either limit are pruned during collection and immediately after a policy reduction. Pruned results cannot be recovered from Sentinel's monitoring file, so back up the data before reducing retention if the history is important.
+
+Prometheus-compatible current gauges are available at `GET /metrics`:
+
+```yaml
+scrape_configs:
+  - job_name: sentinel
+    static_configs:
+      - targets: ['sentinel-host:4100']
+```
+
+The export includes monitor status, latest latency, health score, uptime, active incidents, enabled alert rules, operating mode, and retained-result count. The endpoint exposes internal monitor names; protect it with network controls or an authenticated reverse proxy when Sentinel is not on a trusted management network.
+
+### Metric endpoints
+
+- `GET /api/metrics?range=24h` returns bucketed history and summaries; supported ranges are `1h`, `6h`, `24h`, `7d`, and `30d`.
+- `PUT /api/metrics/settings` updates `days` and `maxResults`, then applies pruning.
+- `GET /metrics` returns Prometheus text exposition format.
 
 ## Verify
 

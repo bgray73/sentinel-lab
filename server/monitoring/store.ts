@@ -7,8 +7,8 @@ export class MonitoringStore {
   async load(): Promise<MonitoringData> {
     try {
       const data = JSON.parse(await readFile(this.filePath, 'utf8')) as Partial<MonitoringData>;
-      return { monitors: data.monitors || [], results: data.results || [], alertRules: data.alertRules || [], incidents: data.incidents || [], deliveries: data.deliveries || [], dependencyMappings: data.dependencyMappings || [] };
-    } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { monitors: [], results: [], alertRules: [], incidents: [], deliveries: [], dependencyMappings: [] }; throw error; }
+      return { monitors: data.monitors || [], results: data.results || [], alertRules: data.alertRules || [], incidents: data.incidents || [], deliveries: data.deliveries || [], dependencyMappings: data.dependencyMappings || [], retentionPolicy:data.retentionPolicy||{days:30,maxResults:25_000} };
+    } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { monitors: [], results: [], alertRules: [], incidents: [], deliveries: [], dependencyMappings: [], retentionPolicy:{days:30,maxResults:25_000} }; throw error; }
   }
   async save(data: MonitoringData) {
     await mkdir(path.dirname(this.filePath), { recursive: true });
