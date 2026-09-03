@@ -39,3 +39,7 @@ Use a certificate trusted by the Sentinel host. For a private CA, set Node's `NO
 - `GET /api/proxmox/status` reports whether environment-based configuration is present.
 - `GET /api/inventory` returns a simulated cluster inventory.
 - `GET /api/inventory?simulate=false` connects to the configured Proxmox API.
+
+## Stage 2: Infrastructure dashboard
+
+Select **Proxmox** in the Sentinel sidebar to open the infrastructure inventory. The dashboard displays cluster totals, simulation/live source status, health warnings, node utilization, and the VM/LXC and storage resources associated with each node. Refresh failures preserve and label the last successful inventory instead of clearing the dashboard.
