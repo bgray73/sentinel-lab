@@ -39,6 +39,33 @@ export function createApp(store: Store, monitoring?: MonitoringService) {
     try { await monitoring.ready; return res.json(await monitoring.run(req.params.id)); }
     catch (error) { return res.status(404).json({ error: error instanceof Error ? error.message : 'Monitor not found' }); }
   });
+  app.get('/api/alerts', async (_req, res) => {
+    if (!monitoring) return res.status(503).json({ error: 'Monitoring service is not available' });
+    await monitoring.ready; return res.json({ rules: monitoring.alertRules(), notifications: monitoring.notificationStatus() });
+  });
+  app.post('/api/alerts', async (req, res) => {
+    if (!monitoring) return res.status(503).json({ error: 'Monitoring service is not available' });
+    try { await monitoring.ready; return res.status(201).json(await monitoring.addAlertRule(req.body || {})); }
+    catch (error) { return res.status(400).json({ error: error instanceof Error ? error.message : 'Invalid alert rule' }); }
+  });
+  app.post('/api/alerts/:id/suppress', async (req, res) => {
+    if (!monitoring) return res.status(503).json({ error: 'Monitoring service is not available' });
+    try { await monitoring.ready; return res.json(await monitoring.suppressAlert(req.params.id, Number(req.body?.minutes || 60))); }
+    catch (error) { return res.status(400).json({ error: error instanceof Error ? error.message : 'Unable to suppress alert' }); }
+  });
+  app.get('/api/incidents', async (req, res) => {
+    if (!monitoring) return res.status(503).json({ error: 'Monitoring service is not available' });
+    await monitoring.ready; return res.json(monitoring.incidents(typeof req.query.status === 'string' ? req.query.status : undefined));
+  });
+  app.post('/api/incidents/:id/acknowledge', async (req, res) => {
+    if (!monitoring) return res.status(503).json({ error: 'Monitoring service is not available' });
+    try { await monitoring.ready; return res.json(await monitoring.acknowledgeIncident(req.params.id)); }
+    catch (error) { return res.status(404).json({ error: error instanceof Error ? error.message : 'Incident not found' }); }
+  });
+  app.get('/api/notifications', async (req, res) => {
+    if (!monitoring) return res.status(503).json({ error: 'Monitoring service is not available' });
+    await monitoring.ready; return res.json({ status: monitoring.notificationStatus(), deliveries: monitoring.deliveries(Number(req.query.limit || 100)) });
+  });
   app.get('/api/proxmox/status', (_req, res) => {
     try { res.json({ configured: configFromEnvironment() !== null, simulationAvailable: true }); }
     catch (error) { res.status(400).json({ configured: false, simulationAvailable: true, error: error instanceof Error ? error.message : 'Invalid Proxmox configuration' }); }

@@ -77,3 +77,7 @@ export type Monitor = {
   uptimePercent: number | null;
 };
 export type MonitorsResponse = { mode: 'simulation' | 'live'; monitors: Monitor[] };
+export type AlertSeverity = 'warning' | 'critical';
+export type AlertRule = { id: string; name: string; monitorId: string; failureThreshold: number; cooldownSeconds: number; severity: AlertSeverity; enabled: boolean; suppressedUntil?: string; createdAt: string };
+export type Incident = { id: string; ruleId: string; monitorId: string; title: string; summary: string; severity: AlertSeverity; status: 'open' | 'acknowledged' | 'resolved'; occurrences: number; openedAt: string; updatedAt: string; acknowledgedAt?: string; resolvedAt?: string; lastNotificationAt?: string };
+export type AlertsResponse = { rules: AlertRule[]; notifications: { mode: 'simulation' | 'live'; webhookConfigured: boolean; emailConfigured: boolean } };

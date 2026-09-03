@@ -88,6 +88,32 @@ Intervals are restricted to 30 seconds through 24 hours and timeouts to 500 ms t
 - `POST /api/monitors/:id/run` runs one monitor immediately.
 - `POST /api/monitors/run-all` runs every enabled monitor.
 
+## Stage 5: Alerts, incidents, and notifications
+
+The **Alerts** page turns repeated monitor failures into incidents. Rules can target one service or every monitor, choose warning or critical severity, set a consecutive-failure threshold, and apply a notification cooldown. Operators can acknowledge incidents, suppress a rule for a maintenance window, and review resolved incidents. A successful check automatically resolves every active incident for that service.
+
+Notification delivery is simulated by default and still recorded in monitoring history. To deliver real webhook or SMTP email alerts, explicitly enable notifications and configure at least one channel:
+
+```bash
+export SENTINEL_REAL_NOTIFICATIONS=true
+export SENTINEL_WEBHOOK_URL=https://alerts.example.net/sentinel
+export SENTINEL_SMTP_URL='smtps://sentinel:encoded-password@smtp.example.net:465'
+export SENTINEL_ALERT_EMAIL_TO=operations@example.net
+export SENTINEL_ALERT_EMAIL_FROM=sentinel@example.net
+pnpm start
+```
+
+Keep SMTP credentials in the service environment or a secrets manager, URL-encode reserved characters in the SMTP URL, and never commit them to the repository. Webhooks receive JSON containing the notification event and incident. Failed deliveries are recorded without interrupting monitor execution.
+
+### Alert endpoints
+
+- `GET /api/alerts` returns alert rules and safe notification configuration status.
+- `POST /api/alerts` creates a validated alert rule.
+- `POST /api/alerts/:id/suppress` starts a timed suppression window.
+- `GET /api/incidents` returns incident history and accepts an optional `status` filter.
+- `POST /api/incidents/:id/acknowledge` acknowledges an active incident.
+- `GET /api/notifications` returns notification delivery history.
+
 ## Verify
 
 ```bash

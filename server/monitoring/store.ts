@@ -5,8 +5,10 @@ import type { MonitoringData } from './types.js';
 export class MonitoringStore {
   constructor(private readonly filePath: string) {}
   async load(): Promise<MonitoringData> {
-    try { return JSON.parse(await readFile(this.filePath, 'utf8')) as MonitoringData; }
-    catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { monitors: [], results: [] }; throw error; }
+    try {
+      const data = JSON.parse(await readFile(this.filePath, 'utf8')) as Partial<MonitoringData>;
+      return { monitors: data.monitors || [], results: data.results || [], alertRules: data.alertRules || [], incidents: data.incidents || [], deliveries: data.deliveries || [] };
+    } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { monitors: [], results: [], alertRules: [], incidents: [], deliveries: [] }; throw error; }
   }
   async save(data: MonitoringData) {
     await mkdir(path.dirname(this.filePath), { recursive: true });
