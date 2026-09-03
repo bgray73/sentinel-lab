@@ -11,7 +11,7 @@ describe('monitoring persistence', () => {
   it('atomically saves and restores monitors and history with private permissions', async () => {
     const directory = await mkdtemp(path.join(os.tmpdir(), 'sentinel-monitoring-')); directories.push(directory);
     const file = path.join(directory, 'monitoring.json'); const store = new MonitoringStore(file);
-    const data = { monitors: [], results: [{ id: 'result-1', monitorId: 'monitor-1', status: 'up' as const, latencyMs: 10, detail: 'ok', checkedAt: '2026-01-01T00:00:00Z' }], alertRules: [], incidents: [], deliveries: [] };
+    const data = { monitors: [], results: [{ id: 'result-1', monitorId: 'monitor-1', status: 'up' as const, latencyMs: 10, detail: 'ok', checkedAt: '2026-01-01T00:00:00Z' }], alertRules: [], incidents: [], deliveries: [], dependencyMappings: [] };
     await store.save(data);
     expect(await store.load()).toEqual(data);
     expect(JSON.parse(await readFile(file, 'utf8')).results).toHaveLength(1);

@@ -55,4 +55,5 @@ export type NotificationDelivery = {
   detail: string;
   attemptedAt: string;
 };
-export type MonitoringData = { monitors: Monitor[]; results: MonitorResult[]; alertRules: AlertRule[]; incidents: Incident[]; deliveries: NotificationDelivery[] };
+export type DependencyMapping = { id: string; monitorId: string; resourceId: string; createdAt: string };
+export type MonitoringData = { monitors: Monitor[]; results: MonitorResult[]; alertRules: AlertRule[]; incidents: Incident[]; deliveries: NotificationDelivery[]; dependencyMappings: DependencyMapping[] };

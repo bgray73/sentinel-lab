@@ -8,6 +8,7 @@ import { configFromEnvironment, discoverProxmox } from './proxmox/client.js';
 import { simulatedInventory } from './proxmox/inventory.js';
 import { discoverDocker, dockerConfigFromEnvironment } from './docker/client.js';
 import { simulatedDockerInventory } from './docker/inventory.js';
+import { buildTopology } from './topology/engine.js';
 import type { MonitoringService } from './monitoring/service.js';
 import type { Run, TestResult } from './types.js';
 
@@ -65,6 +66,30 @@ export function createApp(store: Store, monitoring?: MonitoringService) {
   app.get('/api/notifications', async (req, res) => {
     if (!monitoring) return res.status(503).json({ error: 'Monitoring service is not available' });
     await monitoring.ready; return res.json({ status: monitoring.notificationStatus(), deliveries: monitoring.deliveries(Number(req.query.limit || 100)) });
+  });
+  app.get('/api/topology', async (req, res) => {
+    if (!monitoring) return res.status(503).json({ error: 'Monitoring service is not available' });
+    try {
+      await monitoring.ready; const simulate = req.query.simulate !== 'false';
+      let proxmox; let docker;
+      if (simulate) { proxmox = simulatedInventory(); docker = simulatedDockerInventory(); }
+      else {
+        const proxmoxConfig = configFromEnvironment(); const dockerConfig = dockerConfigFromEnvironment();
+        if (!proxmoxConfig || !dockerConfig) return res.status(503).json({ error: 'Live topology requires both Proxmox and Docker connections' });
+        [proxmox, docker] = await Promise.all([discoverProxmox(proxmoxConfig), discoverDocker(dockerConfig)]);
+      }
+      return res.json(buildTopology(proxmox, docker, monitoring.list(), { incidents: monitoring.incidents(), mappings: monitoring.dependencies() }));
+    } catch (error) { return res.status(502).json({ error: error instanceof Error ? error.message : 'Topology discovery failed' }); }
+  });
+  app.post('/api/topology/mappings', async (req, res) => {
+    if (!monitoring) return res.status(503).json({ error: 'Monitoring service is not available' });
+    try { await monitoring.ready; return res.status(201).json(await monitoring.addDependency(req.body || {})); }
+    catch (error) { return res.status(400).json({ error: error instanceof Error ? error.message : 'Invalid dependency mapping' }); }
+  });
+  app.delete('/api/topology/mappings/:id', async (req, res) => {
+    if (!monitoring) return res.status(503).json({ error: 'Monitoring service is not available' });
+    try { await monitoring.ready; return res.json(await monitoring.removeDependency(req.params.id)); }
+    catch (error) { return res.status(404).json({ error: error instanceof Error ? error.message : 'Dependency mapping not found' }); }
   });
   app.get('/api/proxmox/status', (_req, res) => {
     try { res.json({ configured: configFromEnvironment() !== null, simulationAvailable: true }); }

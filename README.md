@@ -114,6 +114,21 @@ Keep SMTP credentials in the service environment or a secrets manager, URL-encod
 - `POST /api/incidents/:id/acknowledge` acknowledges an active incident.
 - `GET /api/notifications` returns notification delivery history.
 
+## Stage 6: Dependency topology and root-cause correlation
+
+The **Topology** page joins Proxmox resources, the Docker host, Compose applications, containers, and service monitors into one directed dependency graph. Sentinel automatically proposes service mappings from resource names and monitor targets. Operators can confirm an upstream resource with a manual mapping; confirmed mappings take priority and persist with the monitoring data.
+
+When incidents are active, Sentinel walks upstream from each affected service. An unhealthy shared dependency becomes the probable root cause and related incidents are consolidated into one correlation group. Every group shows the affected services, dependency distance, resource state, and a heuristic confidence score. If no unhealthy upstream dependency exists, Sentinel keeps the event at service level instead of claiming an unsupported infrastructure cause.
+
+Correlation is advisory only. Stage 6 does not restart workloads, alter Proxmox, or close incidents. Live topology requires both configured Proxmox and Docker connections; simulation remains the default.
+
+### Topology endpoints
+
+- `GET /api/topology` returns the simulated graph, mappings, correlation groups, and summary.
+- `GET /api/topology?simulate=false` builds a live graph from configured Proxmox and Docker connections.
+- `POST /api/topology/mappings` confirms a monitor-to-resource dependency.
+- `DELETE /api/topology/mappings/:id` removes a confirmed mapping and restores automatic inference.
+
 ## Verify
 
 ```bash

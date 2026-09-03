@@ -2,7 +2,7 @@ import path from 'node:path';
 import { calculateHealth, runMonitorCheck } from './checks.js';
 import { NotificationDispatcher } from './notifications.js';
 import { MonitoringStore } from './store.js';
-import type { AlertRule, AlertSeverity, Incident, Monitor, MonitoringData, MonitorProtocol, MonitorResult, MonitorView, NotificationDelivery } from './types.js';
+import type { AlertRule, AlertSeverity, DependencyMapping, Incident, Monitor, MonitoringData, MonitorProtocol, MonitorResult, MonitorView, NotificationDelivery } from './types.js';
 
 const defaultMonitors: Monitor[] = [
   { id: 'monitor-web', name: 'Sentinel web interface', protocol: 'http', target: 'https://sentinel.example.test/health', intervalSeconds: 60, timeoutMs: 5000, enabled: true, expectedStatus: 200, createdAt: new Date().toISOString() },
@@ -12,7 +12,7 @@ const defaultMonitors: Monitor[] = [
 const defaultAlertRule: AlertRule = { id: 'alert-consecutive-failures', name: 'Repeated service failure', monitorId: '*', failureThreshold: 2, cooldownSeconds: 900, severity: 'critical', enabled: true, createdAt: new Date().toISOString() };
 
 export class MonitoringService {
-  private data: MonitoringData = { monitors: [], results: [], alertRules: [], incidents: [], deliveries: [] };
+  private data: MonitoringData = { monitors: [], results: [], alertRules: [], incidents: [], deliveries: [], dependencyMappings: [] };
   readonly ready: Promise<void>;
   private readonly simulate: boolean;
   private readonly store: MonitoringStore;
@@ -42,6 +42,19 @@ export class MonitoringService {
   incidents(status?: string) { return this.data.incidents.filter(incident => !status || incident.status === status); }
   deliveries(limit = 100) { return this.data.deliveries.slice(0, Math.min(Math.max(limit, 1), 500)); }
   notificationStatus() { return this.notifications.status(); }
+  dependencies() { return this.data.dependencyMappings; }
+  async addDependency(input: Record<string, unknown>) {
+    const monitorId = String(input.monitorId || '').trim(); const resourceId = String(input.resourceId || '').trim();
+    if (!this.data.monitors.some(monitor => monitor.id === monitorId)) throw new Error('Selected monitor does not exist');
+    if (!resourceId || resourceId.length > 200) throw new Error('Resource ID is required and must be at most 200 characters');
+    const existing = this.data.dependencyMappings.find(mapping => mapping.monitorId === monitorId && mapping.resourceId === resourceId); if (existing) return existing;
+    const mapping: DependencyMapping = { id: `dependency-${crypto.randomUUID()}`, monitorId, resourceId, createdAt: new Date().toISOString() };
+    this.data.dependencyMappings.push(mapping); await this.store.save(this.data); return mapping;
+  }
+  async removeDependency(id: string) {
+    const index = this.data.dependencyMappings.findIndex(mapping => mapping.id === id); if (index < 0) throw new Error('Dependency mapping not found');
+    const [removed] = this.data.dependencyMappings.splice(index, 1); await this.store.save(this.data); return removed;
+  }
   async add(input: Record<string, unknown>) {
     const protocol = input.protocol as MonitorProtocol;
     if (!['http', 'tcp', 'dns'].includes(protocol)) throw new Error('Protocol must be http, tcp, or dns');

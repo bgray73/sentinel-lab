@@ -27,4 +27,13 @@ describe('alert and incident lifecycle', () => {
     const service = new MonitoringService({ SENTINEL_DATA_FILE: path.join(directory, 'data.json') }); await service.ready;
     await expect(service.addAlertRule({ name: 'Bad rule', monitorId: '*', severity: 'critical', failureThreshold: 0, cooldownSeconds: 900 })).rejects.toThrow('threshold');
   });
+
+  it('adds and removes operator-confirmed dependency mappings', async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), 'sentinel-dependencies-')); directories.push(directory);
+    const service = new MonitoringService({ SENTINEL_DATA_FILE: path.join(directory, 'data.json') }); await service.ready;
+    const mapping = await service.addDependency({ monitorId: 'monitor-dns', resourceId: 'lxc/202' });
+    expect(service.dependencies()).toEqual([mapping]);
+    await expect(service.addDependency({ monitorId: 'missing', resourceId: 'lxc/202' })).rejects.toThrow('does not exist');
+    await service.removeDependency(mapping.id); expect(service.dependencies()).toEqual([]);
+  });
 });
