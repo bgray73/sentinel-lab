@@ -2,6 +2,8 @@ import express from 'express';
 import { defaultTests, runTest, type TestCase, type TestResult } from './runner.js';
 import { configFromEnvironment, discoverProxmox } from './proxmox/client.js';
 import { simulatedInventory } from './proxmox/inventory.js';
+import { discoverDocker, dockerConfigFromEnvironment } from './docker/client.js';
+import { simulatedDockerInventory } from './docker/inventory.js';
 const app = express(); app.use(express.json());
 let tests = [...defaultTests]; let history: { id: string; startedAt: string; duration: number; results: TestResult[] }[] = [];
 
@@ -11,6 +13,27 @@ app.get('/api/proxmox/status', (_req, res) => {
     res.json({ configured: configFromEnvironment() !== null, simulationAvailable: true });
   } catch (error) {
     res.status(400).json({ configured: false, simulationAvailable: true, error: error instanceof Error ? error.message : 'Invalid Proxmox configuration' });
+  }
+});
+app.get('/api/connections', (_req, res) => {
+  const connections = { proxmox: { configured: false }, docker: { configured: false } };
+  try { connections.proxmox.configured = configFromEnvironment() !== null; } catch { connections.proxmox.configured = false; }
+  try { connections.docker.configured = dockerConfigFromEnvironment() !== null; } catch { connections.docker.configured = false; }
+  res.json(connections);
+});
+app.get('/api/docker/status', (_req, res) => {
+  try { res.json({ configured: dockerConfigFromEnvironment() !== null, simulationAvailable: true }); }
+  catch (error) { res.status(400).json({ configured: false, simulationAvailable: true, error: error instanceof Error ? error.message : 'Invalid Docker configuration' }); }
+});
+app.get('/api/docker/inventory', async (req, res) => {
+  const simulate = req.query.simulate !== 'false';
+  if (simulate) return res.json(simulatedDockerInventory());
+  try {
+    const config = dockerConfigFromEnvironment();
+    if (!config) return res.status(503).json({ error: 'Docker is not configured. Set DOCKER_SOCKET_PATH.' });
+    return res.json(await discoverDocker(config));
+  } catch (error) {
+    return res.status(502).json({ error: error instanceof Error ? error.message : 'Docker discovery failed' });
   }
 });
 app.get('/api/inventory', async (req, res) => {

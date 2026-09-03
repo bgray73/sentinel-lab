@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Activity, Braces, Box, Boxes, Cable, Check, ChevronDown, CircleAlert, Gauge, Globe2, HardDrive, LayoutDashboard, Menu, Network, Play, Plus, Radio, RefreshCw, Search, Server, Settings, ShieldCheck, Timer, X } from 'lucide-react';
 import { formatBytes, groupInventory, percent } from './inventory';
-import type { Kind, ProxmoxInventory, ProxmoxResource, Result, Run, Test } from './types';
+import type { ConnectionStatus, DockerContainer, DockerInventory, Kind, ProxmoxInventory, ProxmoxResource, Result, Run, Test } from './types';
 
 const kindMeta: Record<Kind, { label: string; icon: typeof Globe2; className: string }> = {
   frontend: { label: 'Web Frontend', icon: Globe2, className: 'blue' }, api: { label: 'Backend API', icon: Braces, className: 'violet' },
@@ -11,10 +11,12 @@ const kindMeta: Record<Kind, { label: string; icon: typeof Globe2; className: st
 export default function App() {
   const [tests, setTests] = useState<Test[]>([]); const [run, setRun] = useState<Run | null>(null); const [running, setRunning] = useState(false);
   const [filter, setFilter] = useState<'all' | Kind>('all'); const [query, setQuery] = useState(''); const [modal, setModal] = useState(false);
-  const [view, setView] = useState<'overview' | 'infrastructure'>('overview');
+  const [view, setView] = useState<'overview' | 'infrastructure' | 'docker' | 'connections'>('overview');
   const [inventory, setInventory] = useState<ProxmoxInventory | null>(null); const [inventoryLoading, setInventoryLoading] = useState(true); const [inventoryError, setInventoryError] = useState('');
+  const [dockerInventory, setDockerInventory] = useState<DockerInventory | null>(null); const [dockerLoading, setDockerLoading] = useState(true); const [dockerError, setDockerError] = useState('');
+  const [connections, setConnections] = useState<ConnectionStatus | null>(null);
   useEffect(() => { fetch('/api/tests').then(r => r.json()).then(setTests).catch(() => {}); }, []);
-  useEffect(() => { void refreshInventory(); }, []);
+  useEffect(() => { void refreshInventory(); void refreshDocker(); void refreshConnections(); }, []);
   const results = useMemo(() => new Map((run?.results || []).map(r => [r.id, r])), [run]);
   const visible = tests.filter(t => (filter === 'all' || t.kind === filter) && t.name.toLowerCase().includes(query.toLowerCase()));
   const passed = run?.results.filter(r => r.status === 'passed').length || 0; const failed = (run?.results.length || 0) - passed;
@@ -22,17 +24,20 @@ export default function App() {
   async function runSuite() { setRunning(true); setRun(null); try { const r = await fetch('/api/runs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ simulate: true }) }); setRun(await r.json()); } finally { setRunning(false); } }
   async function addTest(data: Omit<Test, 'id'>) { const r = await fetch('/api/tests', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); const created = await r.json(); setTests(v => [...v, created]); setModal(false); }
   async function refreshInventory() { setInventoryLoading(true); setInventoryError(''); try { const response = await fetch('/api/inventory'); if (!response.ok) throw new Error(`Inventory request failed with HTTP ${response.status}`); setInventory(await response.json()); } catch (error) { setInventoryError(error instanceof Error ? error.message : 'Unable to load Proxmox inventory'); } finally { setInventoryLoading(false); } }
+  async function refreshDocker() { setDockerLoading(true); setDockerError(''); try { const response = await fetch('/api/docker/inventory'); if (!response.ok) throw new Error(`Docker request failed with HTTP ${response.status}`); setDockerInventory(await response.json()); } catch (error) { setDockerError(error instanceof Error ? error.message : 'Unable to load Docker inventory'); } finally { setDockerLoading(false); } }
+  async function refreshConnections() { try { const response = await fetch('/api/connections'); if (response.ok) setConnections(await response.json()); } catch { setConnections(null); } }
+  const viewTitle = ({ overview: 'Durability overview', infrastructure: 'Proxmox infrastructure', docker: 'Docker applications', connections: 'Connections' } as const)[view];
 
   return <div className="shell">
     <aside className="sidebar">
       <div className="brand"><span className="brand-mark"><Activity size={19}/></span><span>Sentinel<span className="brand-accent">Lab</span></span></div>
       <nav><Nav active={view === 'overview'} icon={LayoutDashboard} label="Overview" onClick={() => setView('overview')}/><Nav icon={Radio} label="Test suites" count={tests.length}/><Nav icon={Timer} label="Run history"/><Nav icon={ShieldCheck} label="Release gates"/></nav>
       <div className="nav-section">INTEGRATIONS</div>
-      <nav><Nav active={view === 'infrastructure'} icon={Server} label="Proxmox" dot onClick={() => setView('infrastructure')}/><Nav icon={Network} label="LiveNX" dot/><Nav icon={Cable} label="LiveWire" dot/><Nav icon={Box} label="Docker" dot/></nav>
-      <div className="side-bottom"><div className="lab-health"><div><span className="pulse"/> LAB HEALTH</div><strong>All systems operational</strong></div><Nav icon={Settings} label="Settings"/></div>
+      <nav><Nav active={view === 'infrastructure'} icon={Server} label="Proxmox" dot onClick={() => setView('infrastructure')}/><Nav icon={Network} label="LiveNX" dot/><Nav icon={Cable} label="LiveWire" dot/><Nav active={view === 'docker'} icon={Box} label="Docker" dot onClick={() => setView('docker')}/></nav>
+      <div className="side-bottom"><div className="lab-health"><div><span className="pulse"/> LAB HEALTH</div><strong>All systems operational</strong></div><Nav active={view === 'connections'} icon={Settings} label="Connections" onClick={() => setView('connections')}/></div>
     </aside>
     <main>
-      <header><button className="mobile-menu"><Menu/></button><div><span className="crumb">Reliability workspace</span><h1>{view === 'overview' ? 'Durability overview' : 'Proxmox infrastructure'}</h1></div><div className="header-actions">{view === 'overview' ? <><div className="environment"><span/> Staging <ChevronDown size={14}/></div><button className="secondary" onClick={() => setModal(true)}><Plus size={17}/> Add test</button><button className="primary" onClick={runSuite} disabled={running}><Play size={16} fill="currentColor"/>{running ? 'Running suite…' : 'Run full suite'}</button></> : <button className="secondary" onClick={refreshInventory} disabled={inventoryLoading}><RefreshCw size={16}/>{inventoryLoading ? 'Refreshing…' : 'Refresh inventory'}</button>}</div></header>
+      <header><button className="mobile-menu"><Menu/></button><div><span className="crumb">Reliability workspace</span><h1>{viewTitle}</h1></div><div className="header-actions">{view === 'overview' ? <><div className="environment"><span/> Staging <ChevronDown size={14}/></div><button className="secondary" onClick={() => setModal(true)}><Plus size={17}/> Add test</button><button className="primary" onClick={runSuite} disabled={running}><Play size={16} fill="currentColor"/>{running ? 'Running suite…' : 'Run full suite'}</button></> : view === 'infrastructure' ? <button className="secondary" onClick={refreshInventory} disabled={inventoryLoading}><RefreshCw size={16}/>{inventoryLoading ? 'Refreshing…' : 'Refresh inventory'}</button> : view === 'docker' ? <button className="secondary" onClick={refreshDocker} disabled={dockerLoading}><RefreshCw size={16}/>{dockerLoading ? 'Refreshing…' : 'Refresh containers'}</button> : <button className="secondary" onClick={refreshConnections}><RefreshCw size={16}/>Refresh status</button>}</div></header>
       {view === 'overview' ? <section className="content">
         <div className="notice"><span className="notice-icon"><ShieldCheck size={19}/></span><div><strong>Release readiness workspace</strong><p>Continuously validate user journeys, API contracts, container health, and LiveNX ↔ LiveWire telemetry before every release.</p></div><button>Configure gates <ChevronDown size={15}/></button></div>
         <div className="metric-grid">
@@ -58,7 +63,7 @@ export default function App() {
             </section>
           </aside>
         </div>
-      </section> : <InventoryDashboard inventory={inventory} loading={inventoryLoading} error={inventoryError} refresh={refreshInventory}/>}
+      </section> : view === 'infrastructure' ? <InventoryDashboard inventory={inventory} loading={inventoryLoading} error={inventoryError} refresh={refreshInventory}/> : view === 'docker' ? <DockerDashboard inventory={dockerInventory} loading={dockerLoading} error={dockerError} refresh={refreshDocker}/> : <ConnectionsDashboard status={connections}/>}
     </main>{modal && <AddModal close={()=>setModal(false)} save={addTest}/>}
   </div>;
 }
@@ -109,4 +114,44 @@ function ResourceRow({resource}:{resource:ProxmoxResource}) {
 
 function Usage({label,value}:{label:string,value:number|null}) { return <div><span>{label}<em>{value === null ? '—' : `${value}%`}</em></span><div className="usage-track"><i style={{width:`${value || 0}%`}}/></div></div> }
 function HealthBadge({health}:{health:ProxmoxResource['health']}) { return <span className={`health-badge ${health}`}><i/>{health}</span> }
+
+function DockerDashboard({inventory,loading,error,refresh}:{inventory:DockerInventory|null,loading:boolean,error:string,refresh:()=>void}) {
+  if (loading && !inventory) return <section className="content"><div className="inventory-state"><RefreshCw className="spin"/><strong>Discovering Docker applications…</strong><span>Reading containers, health checks, ports, and Compose labels.</span></div></section>;
+  if (error && !inventory) return <section className="content"><div className="inventory-state error-state"><CircleAlert/><strong>Docker inventory unavailable</strong><span>{error}</span><button className="secondary" onClick={refresh}>Try again</button></div></section>;
+  if (!inventory) return null;
+  const grouped = inventory.containers.reduce<Record<string,DockerContainer[]>>((projects,container) => { const key = container.composeProject || 'Standalone containers'; (projects[key] ||= []).push(container); return projects; }, {});
+  return <section className="content infrastructure-content">
+    <div className="inventory-banner docker-banner"><div><span className={`source-badge ${inventory.source}`}>{inventory.source === 'simulation' ? 'SIMULATION' : 'LIVE DOCKER'}</span><strong>{inventory.engineName}</strong><p>{inventory.source === 'simulation' ? 'Sample application data is active. Configure a Docker socket to discover the real container host.' : `Docker Engine ${inventory.engineVersion || ''} · read-only discovery`}</p></div><small>Updated {new Date(inventory.collectedAt).toLocaleTimeString()}</small></div>
+    {error && <div className="inline-error"><CircleAlert size={15}/>{error}. Displaying the last successful container inventory.</div>}
+    <div className="metric-grid inventory-metrics">
+      <Metric label="Containers" value={String(inventory.summary.total)} detail={`${inventory.summary.running} running · ${inventory.summary.stopped} stopped`} icon={Box}/>
+      <Metric label="Healthy" value={String(inventory.summary.healthy)} detail="Docker health checks passing" icon={ShieldCheck} tone="good"/>
+      <Metric label="Unhealthy" value={String(inventory.summary.unhealthy)} detail={inventory.summary.unhealthy ? 'Immediate review required' : 'No failed health checks'} icon={CircleAlert} tone={inventory.summary.unhealthy ? 'bad' : 'good'}/>
+      <Metric label="Compose projects" value={String(inventory.summary.composeProjects)} detail="Application groups discovered" icon={Boxes}/>
+    </div>
+    <section className="panel inventory-panel"><div className="panel-head"><div><h2>Application inventory</h2><p>Compose project → service → container health and exposed ports</p></div><span className="resource-count">{Object.keys(grouped).length} groups</span></div>
+      <div className="app-grid">{Object.entries(grouped).map(([project,containers]) => <article className="app-card" key={project}><div className="app-head"><span><Boxes size={17}/></span><div><strong>{project}</strong><small>{containers.length} service{containers.length === 1 ? '' : 's'}</small></div><HealthBadge health={containers.some(item => item.health === 'critical') ? 'critical' : containers.some(item => item.health === 'warning') ? 'warning' : 'healthy'}/></div>{containers.map(container => <ContainerRow key={container.id} container={container}/>)}</article>)}</div>
+    </section>
+  </section>;
+}
+
+function ContainerRow({container}:{container:DockerContainer}) {
+  const ports = container.ports.filter(port => port.publicPort).map(port => `${port.publicPort}:${port.privatePort}/${port.protocol}`).join(', ');
+  return <div className="container-row"><span><Box size={15}/></span><div><strong>{container.composeService || container.name}</strong><small>{container.image}</small><em>{ports || 'No published ports'} · {container.status}</em></div><HealthBadge health={container.health}/></div>;
+}
+
+function ConnectionsDashboard({status}:{status:ConnectionStatus|null}) {
+  return <section className="content connections-content">
+    <div className="notice"><span className="notice-icon"><ShieldCheck size={19}/></span><div><strong>Credentials stay outside Sentinel</strong><p>Connections use environment variables and read-only permissions. Tokens and socket credentials are never returned to the browser.</p></div></div>
+    <div className="connection-grid">
+      <ConnectionCard icon={Server} name="Proxmox VE" configured={status?.proxmox.configured} description="Discovers cluster nodes, QEMU VMs, LXC containers, storage, state, and utilization." variables={["PVE_URL=https://proxmox.example:8006","PVE_TOKEN_ID=sentinel@pve!monitoring","PVE_TOKEN_SECRET=replace-with-token-secret"]}/>
+      <ConnectionCard icon={Box} name="Docker Engine" configured={status?.docker.configured} description="Discovers containers, Compose projects, health checks, images, state, and published ports." variables={["DOCKER_SOCKET_PATH=/var/run/docker.sock"]}/>
+    </div>
+    <section className="panel safety-panel"><div className="panel-head"><div><h2>Connection safety</h2><p>Recommended permissions before enabling live discovery</p></div></div><div className="safety-list"><div><Check size={15}/><span><strong>Proxmox</strong>Use a dedicated API token with the PVEAuditor role at `/`.</span></div><div><Check size={15}/><span><strong>TLS</strong>Trust the Proxmox certificate or private CA on the Sentinel host.</span></div><div><Check size={15}/><span><strong>Docker</strong>Mount the socket read-only and never expose the Docker API publicly.</span></div><div><Check size={15}/><span><strong>Secrets</strong>Supply values through the service environment or a secrets manager.</span></div></div></section>
+  </section>;
+}
+
+function ConnectionCard({icon:Icon,name,configured,description,variables}:{icon:typeof Server,name:string,configured?:boolean,description:string,variables:string[]}) {
+  return <article className="connection-card"><div className="connection-head"><span><Icon size={20}/></span><div><h2>{name}</h2><p>{description}</p></div><span className={`connection-status ${configured ? 'configured' : 'setup'}`}><i/>{configured ? 'Configured' : 'Setup required'}</span></div><div className="env-block"><span>ENVIRONMENT VARIABLES</span>{variables.map(variable => <code key={variable}>{variable}</code>)}</div><small>{configured ? 'Configuration detected by the Sentinel API.' : 'Add these values to the Sentinel API environment, then restart the service.'}</small></article>;
+}
 function AddModal({close,save}:{close:()=>void,save:(t:Omit<Test,'id'>)=>void}) { const [name,setName]=useState(''); const [target,setTarget]=useState(''); const [kind,setKind]=useState<Kind>('frontend'); return <div className="modal-wrap" onMouseDown={e=>e.target===e.currentTarget&&close()}><form className="modal" onSubmit={e=>{e.preventDefault();save({name,target,kind,critical:true,timeoutMs:10000})}}><button type="button" className="modal-x" onClick={close}><X/></button><span className="eyebrow">NEW CHECK</span><h2>Add a durability test</h2><p>Define a target and include it in the next release-readiness run.</p><label>Test name<input required value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. LiveNX dashboard login"/></label><label>Surface<select value={kind} onChange={e=>setKind(e.target.value as Kind)}>{Object.entries(kindMeta).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}</select></label><label>Target URL<input required type="url" value={target} onChange={e=>setTarget(e.target.value)} placeholder="https://staging.example.com/health"/></label><div className="modal-actions"><button type="button" className="secondary" onClick={close}>Cancel</button><button className="primary">Add to suite</button></div></form></div> }

@@ -43,3 +43,23 @@ Use a certificate trusted by the Sentinel host. For a private CA, set Node's `NO
 ## Stage 2: Infrastructure dashboard
 
 Select **Proxmox** in the Sentinel sidebar to open the infrastructure inventory. The dashboard displays cluster totals, simulation/live source status, health warnings, node utilization, and the VM/LXC and storage resources associated with each node. Refresh failures preserve and label the last successful inventory instead of clearing the dashboard.
+
+## Stage 3: Connections and Docker applications
+
+The **Connections** page reports whether Proxmox and Docker configuration is available without exposing secrets to the browser. The **Docker** page groups containers into Compose applications and displays container state, health checks, images, and published ports.
+
+Docker discovery is disabled until an absolute socket path is explicitly configured:
+
+```bash
+export DOCKER_SOCKET_PATH=/var/run/docker.sock
+curl 'http://localhost:4100/api/docker/inventory?simulate=false'
+```
+
+Sentinel only calls Docker's read-only `/info` and `/containers/json?all=1` endpoints. Access to the Docker socket is highly privileged even when the application only issues GET requests: never publish the socket over an unauthenticated TCP endpoint, and run Sentinel with the minimum required host permissions.
+
+### Docker and connection endpoints
+
+- `GET /api/connections` reports whether Proxmox and Docker are configured.
+- `GET /api/docker/status` reports Docker configuration state.
+- `GET /api/docker/inventory` returns safe simulated container data.
+- `GET /api/docker/inventory?simulate=false` discovers the configured Docker Engine.
