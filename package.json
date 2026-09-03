@@ -16,6 +16,7 @@
     "concurrently": "latest",
     "express": "latest",
     "lucide-react": "latest",
+    "nodemailer": "^9.1.1",
     "react": "latest",
     "react-dom": "latest",
     "tsx": "latest",
@@ -24,6 +25,7 @@
   "devDependencies": {
     "@types/express": "latest",
     "@types/node": "latest",
+    "@types/nodemailer": "^8.0.1",
     "@types/react": "latest",
     "@types/react-dom": "latest",
     "typescript": "latest",

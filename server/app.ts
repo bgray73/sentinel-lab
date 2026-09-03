@@ -4,14 +4,117 @@ import { resolve } from 'node:path';
 import { evaluateGate, runTest } from './runner.js';
 import { Store } from './store.js';
 import { ValidationError, validateRun, validateTest } from './validation.js';
+import { configFromEnvironment, discoverProxmox } from './proxmox/client.js';
+import { simulatedInventory } from './proxmox/inventory.js';
+import { discoverDocker, dockerConfigFromEnvironment } from './docker/client.js';
+import { simulatedDockerInventory } from './docker/inventory.js';
+import { buildTopology } from './topology/engine.js';
+import type { MonitoringService } from './monitoring/service.js';
 import type { Run, TestResult } from './types.js';
 
-export function createApp(store: Store) {
+export function createApp(store: Store, monitoring?: MonitoringService) {
   const app = express();
   app.disable('x-powered-by');
   app.use(express.json({ limit: '32kb' }));
 
   app.get('/api/health', (_req, res) => res.json({ status: 'ok', service: 'sentinel-api' }));
+  app.get('/api/monitors', async (_req, res) => {
+    if (!monitoring) return res.status(503).json({ error: 'Monitoring service is not available' });
+    await monitoring.ready; return res.json({ mode: monitoring.mode(), monitors: monitoring.list() });
+  });
+  app.get('/api/monitors/history', async (req, res) => {
+    if (!monitoring) return res.status(503).json({ error: 'Monitoring service is not available' });
+    await monitoring.ready; return res.json(monitoring.history(typeof req.query.monitorId === 'string' ? req.query.monitorId : undefined, Number(req.query.limit || 100)));
+  });
+  app.post('/api/monitors', async (req, res) => {
+    if (!monitoring) return res.status(503).json({ error: 'Monitoring service is not available' });
+    try { await monitoring.ready; return res.status(201).json(await monitoring.add(req.body || {})); }
+    catch (error) { return res.status(400).json({ error: error instanceof Error ? error.message : 'Invalid monitor' }); }
+  });
+  app.post('/api/monitors/run-all', async (_req, res) => {
+    if (!monitoring) return res.status(503).json({ error: 'Monitoring service is not available' });
+    await monitoring.ready; return res.json(await monitoring.runAll());
+  });
+  app.post('/api/monitors/:id/run', async (req, res) => {
+    if (!monitoring) return res.status(503).json({ error: 'Monitoring service is not available' });
+    try { await monitoring.ready; return res.json(await monitoring.run(req.params.id)); }
+    catch (error) { return res.status(404).json({ error: error instanceof Error ? error.message : 'Monitor not found' }); }
+  });
+  app.get('/api/alerts', async (_req, res) => {
+    if (!monitoring) return res.status(503).json({ error: 'Monitoring service is not available' });
+    await monitoring.ready; return res.json({ rules: monitoring.alertRules(), notifications: monitoring.notificationStatus() });
+  });
+  app.post('/api/alerts', async (req, res) => {
+    if (!monitoring) return res.status(503).json({ error: 'Monitoring service is not available' });
+    try { await monitoring.ready; return res.status(201).json(await monitoring.addAlertRule(req.body || {})); }
+    catch (error) { return res.status(400).json({ error: error instanceof Error ? error.message : 'Invalid alert rule' }); }
+  });
+  app.post('/api/alerts/:id/suppress', async (req, res) => {
+    if (!monitoring) return res.status(503).json({ error: 'Monitoring service is not available' });
+    try { await monitoring.ready; return res.json(await monitoring.suppressAlert(req.params.id, Number(req.body?.minutes || 60))); }
+    catch (error) { return res.status(400).json({ error: error instanceof Error ? error.message : 'Unable to suppress alert' }); }
+  });
+  app.get('/api/incidents', async (req, res) => {
+    if (!monitoring) return res.status(503).json({ error: 'Monitoring service is not available' });
+    await monitoring.ready; return res.json(monitoring.incidents(typeof req.query.status === 'string' ? req.query.status : undefined));
+  });
+  app.post('/api/incidents/:id/acknowledge', async (req, res) => {
+    if (!monitoring) return res.status(503).json({ error: 'Monitoring service is not available' });
+    try { await monitoring.ready; return res.json(await monitoring.acknowledgeIncident(req.params.id)); }
+    catch (error) { return res.status(404).json({ error: error instanceof Error ? error.message : 'Incident not found' }); }
+  });
+  app.get('/api/notifications', async (req, res) => {
+    if (!monitoring) return res.status(503).json({ error: 'Monitoring service is not available' });
+    await monitoring.ready; return res.json({ status: monitoring.notificationStatus(), deliveries: monitoring.deliveries(Number(req.query.limit || 100)) });
+  });
+  app.get('/api/topology', async (req, res) => {
+    if (!monitoring) return res.status(503).json({ error: 'Monitoring service is not available' });
+    try {
+      await monitoring.ready; const simulate = req.query.simulate !== 'false';
+      let proxmox; let docker;
+      if (simulate) { proxmox = simulatedInventory(); docker = simulatedDockerInventory(); }
+      else {
+        const proxmoxConfig = configFromEnvironment(); const dockerConfig = dockerConfigFromEnvironment();
+        if (!proxmoxConfig || !dockerConfig) return res.status(503).json({ error: 'Live topology requires both Proxmox and Docker connections' });
+        [proxmox, docker] = await Promise.all([discoverProxmox(proxmoxConfig), discoverDocker(dockerConfig)]);
+      }
+      return res.json(buildTopology(proxmox, docker, monitoring.list(), { incidents: monitoring.incidents(), mappings: monitoring.dependencies() }));
+    } catch (error) { return res.status(502).json({ error: error instanceof Error ? error.message : 'Topology discovery failed' }); }
+  });
+  app.post('/api/topology/mappings', async (req, res) => {
+    if (!monitoring) return res.status(503).json({ error: 'Monitoring service is not available' });
+    try { await monitoring.ready; return res.status(201).json(await monitoring.addDependency(req.body || {})); }
+    catch (error) { return res.status(400).json({ error: error instanceof Error ? error.message : 'Invalid dependency mapping' }); }
+  });
+  app.delete('/api/topology/mappings/:id', async (req, res) => {
+    if (!monitoring) return res.status(503).json({ error: 'Monitoring service is not available' });
+    try { await monitoring.ready; return res.json(await monitoring.removeDependency(req.params.id)); }
+    catch (error) { return res.status(404).json({ error: error instanceof Error ? error.message : 'Dependency mapping not found' }); }
+  });
+  app.get('/api/proxmox/status', (_req, res) => {
+    try { res.json({ configured: configFromEnvironment() !== null, simulationAvailable: true }); }
+    catch (error) { res.status(400).json({ configured: false, simulationAvailable: true, error: error instanceof Error ? error.message : 'Invalid Proxmox configuration' }); }
+  });
+  app.get('/api/connections', (_req, res) => {
+    const connections = { proxmox: { configured: false }, docker: { configured: false } };
+    try { connections.proxmox.configured = configFromEnvironment() !== null; } catch { connections.proxmox.configured = false; }
+    try { connections.docker.configured = dockerConfigFromEnvironment() !== null; } catch { connections.docker.configured = false; }
+    res.json(connections);
+  });
+  app.get('/api/docker/status', (_req, res) => {
+    try { res.json({ configured: dockerConfigFromEnvironment() !== null, simulationAvailable: true }); }
+    catch (error) { res.status(400).json({ configured: false, simulationAvailable: true, error: error instanceof Error ? error.message : 'Invalid Docker configuration' }); }
+  });
+  app.get('/api/docker/inventory', async (req, res) => {
+    if (req.query.simulate !== 'false') return res.json(simulatedDockerInventory());
+    try { const config = dockerConfigFromEnvironment(); if (!config) return res.status(503).json({ error: 'Docker is not configured. Set DOCKER_SOCKET_PATH.' }); return res.json(await discoverDocker(config)); }
+    catch (error) { return res.status(502).json({ error: error instanceof Error ? error.message : 'Docker discovery failed' }); }
+  });
+  app.get('/api/inventory', async (req, res) => {
+    if (req.query.simulate !== 'false') return res.json(simulatedInventory());
+    try { const config = configFromEnvironment(); if (!config) return res.status(503).json({ error: 'Proxmox is not configured. Set PVE_URL, PVE_TOKEN_ID, and PVE_TOKEN_SECRET.' }); return res.json(await discoverProxmox(config)); }
+    catch (error) { return res.status(502).json({ error: error instanceof Error ? error.message : 'Proxmox discovery failed' }); }
+  });
   app.get('/api/tests', (_req, res) => res.json(store.listTests()));
   app.get('/api/runs', (_req, res) => res.json(store.listRuns()));
   app.post('/api/tests', (req, res, next) => {

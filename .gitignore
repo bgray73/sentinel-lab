@@ -3,5 +3,6 @@ dist
 .DS_Store
 *.log
 *.tsbuildinfo
+.sentinel/
 data/*.db
 data/*.db-*
