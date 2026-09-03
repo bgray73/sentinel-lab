@@ -4,10 +4,17 @@ import { configFromEnvironment, discoverProxmox } from './proxmox/client.js';
 import { simulatedInventory } from './proxmox/inventory.js';
 import { discoverDocker, dockerConfigFromEnvironment } from './docker/client.js';
 import { simulatedDockerInventory } from './docker/inventory.js';
+import { MonitoringService } from './monitoring/service.js';
 const app = express(); app.use(express.json());
 let tests = [...defaultTests]; let history: { id: string; startedAt: string; duration: number; results: TestResult[] }[] = [];
+const monitoring = new MonitoringService();
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok', service: 'sentinel-api' }));
+app.get('/api/monitors', async (_req, res) => { await monitoring.ready; res.json({ mode: monitoring.mode(), monitors: monitoring.list() }); });
+app.get('/api/monitors/history', async (req, res) => { await monitoring.ready; res.json(monitoring.history(typeof req.query.monitorId === 'string' ? req.query.monitorId : undefined, Number(req.query.limit || 100))); });
+app.post('/api/monitors', async (req, res) => { try { await monitoring.ready; res.status(201).json(await monitoring.add(req.body || {})); } catch (error) { res.status(400).json({ error: error instanceof Error ? error.message : 'Invalid monitor' }); } });
+app.post('/api/monitors/run-all', async (_req, res) => { await monitoring.ready; res.json(await monitoring.runAll()); });
+app.post('/api/monitors/:id/run', async (req, res) => { try { await monitoring.ready; res.json(await monitoring.run(req.params.id)); } catch (error) { res.status(404).json({ error: error instanceof Error ? error.message : 'Monitor not found' }); } });
 app.get('/api/proxmox/status', (_req, res) => {
   try {
     res.json({ configured: configFromEnvironment() !== null, simulationAvailable: true });

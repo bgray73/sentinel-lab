@@ -58,3 +58,21 @@ export type DockerInventory = {
   summary: { total: number; running: number; stopped: number; healthy: number; unhealthy: number; composeProjects: number };
 };
 export type ConnectionStatus = { proxmox: { configured: boolean }; docker: { configured: boolean } };
+
+export type MonitorProtocol = 'http' | 'tcp' | 'dns';
+export type MonitorResult = { id: string; monitorId: string; status: 'up' | 'down'; latencyMs: number; detail: string; checkedAt: string };
+export type Monitor = {
+  id: string;
+  name: string;
+  protocol: MonitorProtocol;
+  target: string;
+  intervalSeconds: number;
+  timeoutMs: number;
+  enabled: boolean;
+  expectedStatus?: number;
+  createdAt: string;
+  lastResult?: MonitorResult;
+  healthScore: number | null;
+  uptimePercent: number | null;
+};
+export type MonitorsResponse = { mode: 'simulation' | 'live'; monitors: Monitor[] };

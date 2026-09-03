@@ -1,0 +1,62 @@
+import path from 'node:path';
+import { calculateHealth, runMonitorCheck } from './checks.js';
+import { MonitoringStore } from './store.js';
+import type { Monitor, MonitoringData, MonitorProtocol, MonitorResult, MonitorView } from './types.js';
+
+const defaultMonitors: Monitor[] = [
+  { id: 'monitor-web', name: 'Sentinel web interface', protocol: 'http', target: 'https://sentinel.example.test/health', intervalSeconds: 60, timeoutMs: 5000, enabled: true, expectedStatus: 200, createdAt: new Date().toISOString() },
+  { id: 'monitor-db', name: 'Application database', protocol: 'tcp', target: 'postgres:5432', intervalSeconds: 60, timeoutMs: 3000, enabled: true, createdAt: new Date().toISOString() },
+  { id: 'monitor-dns', name: 'Lab DNS resolution', protocol: 'dns', target: 'proxmox.example.test', intervalSeconds: 120, timeoutMs: 3000, enabled: true, createdAt: new Date().toISOString() }
+];
+
+export class MonitoringService {
+  private data: MonitoringData = { monitors: [], results: [] };
+  readonly ready: Promise<void>;
+  private readonly simulate: boolean;
+  private readonly store: MonitoringStore;
+
+  constructor(env: NodeJS.ProcessEnv = process.env) {
+    this.simulate = env.SENTINEL_REAL_CHECKS !== 'true';
+    this.store = new MonitoringStore(env.SENTINEL_DATA_FILE || path.resolve('.sentinel/monitoring.json'));
+    this.ready = this.initialize();
+  }
+  private async initialize() {
+    this.data = await this.store.load();
+    if (!this.data.monitors.length && this.simulate) { this.data.monitors = defaultMonitors; await this.store.save(this.data); }
+    const timer = setInterval(() => void this.runDue(), 10_000); timer.unref();
+  }
+  mode() { return this.simulate ? 'simulation' : 'live'; }
+  list(): MonitorView[] {
+    return this.data.monitors.map(monitor => {
+      const results = this.data.results.filter(result => result.monitorId === monitor.id).slice(0, 20);
+      return { ...monitor, lastResult: results[0], ...calculateHealth(results, monitor.timeoutMs) };
+    });
+  }
+  history(monitorId?: string, limit = 100) { return this.data.results.filter(result => !monitorId || result.monitorId === monitorId).slice(0, Math.min(Math.max(limit, 1), 500)); }
+  async add(input: Record<string, unknown>) {
+    const protocol = input.protocol as MonitorProtocol;
+    if (!['http', 'tcp', 'dns'].includes(protocol)) throw new Error('Protocol must be http, tcp, or dns');
+    const name = String(input.name || '').trim(); const target = String(input.target || '').trim();
+    if (!name || name.length > 100) throw new Error('Name is required and must be at most 100 characters');
+    if (!target || target.length > 500) throw new Error('Target is required and must be at most 500 characters');
+    const intervalSeconds = Number(input.intervalSeconds || 60); const timeoutMs = Number(input.timeoutMs || 5000);
+    if (!Number.isInteger(intervalSeconds) || intervalSeconds < 30 || intervalSeconds > 86_400) throw new Error('Interval must be between 30 and 86400 seconds');
+    if (!Number.isInteger(timeoutMs) || timeoutMs < 500 || timeoutMs > 30_000) throw new Error('Timeout must be between 500 and 30000 milliseconds');
+    const monitor: Monitor = { id: `monitor-${Date.now()}`, name, protocol, target, intervalSeconds, timeoutMs, enabled: input.enabled !== false, expectedStatus: protocol === 'http' && input.expectedStatus ? Number(input.expectedStatus) : undefined, createdAt: new Date().toISOString() };
+    this.data.monitors.push(monitor); await this.store.save(this.data); return monitor;
+  }
+  async run(id: string) {
+    const monitor = this.data.monitors.find(item => item.id === id); if (!monitor) throw new Error('Monitor not found');
+    const result = await runMonitorCheck(monitor, this.simulate); await this.record(result); return result;
+  }
+  async runAll() { const results: MonitorResult[] = []; for (const monitor of this.data.monitors.filter(item => item.enabled)) results.push(await this.run(monitor.id)); return results; }
+  private async record(result: MonitorResult) { this.data.results.unshift(result); this.data.results = this.data.results.slice(0, 5_000); await this.store.save(this.data); }
+  private async runDue() {
+    await this.ready;
+    const now = Date.now();
+    for (const monitor of this.data.monitors.filter(item => item.enabled)) {
+      const last = this.data.results.find(result => result.monitorId === monitor.id);
+      if (!last || now - new Date(last.checkedAt).getTime() >= monitor.intervalSeconds * 1000) await this.run(monitor.id);
+    }
+  }
+}

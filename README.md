@@ -63,3 +63,25 @@ Sentinel only calls Docker's read-only `/info` and `/containers/json?all=1` endp
 - `GET /api/docker/status` reports Docker configuration state.
 - `GET /api/docker/inventory` returns safe simulated container data.
 - `GET /api/docker/inventory?simulate=false` discovers the configured Docker Engine.
+
+## Stage 4: Scheduled service monitoring
+
+The **Services** page adds scheduled HTTP/HTTPS, TCP-port, and DNS checks. Sentinel retains the latest 5,000 results in a local JSON data file, calculates recent uptime and response-time health scores, and restores monitor history after a restart.
+
+Simulation remains the default. Enable real outbound checks only after the Sentinel API is protected from unauthorized users:
+
+```bash
+export SENTINEL_REAL_CHECKS=true
+export SENTINEL_DATA_FILE=/var/lib/sentinel/monitoring.json
+pnpm start
+```
+
+Intervals are restricted to 30 seconds through 24 hours and timeouts to 500 ms through 30 seconds. The data file is written with owner-only permissions. Because monitoring private applications requires access to internal addresses, secure the Sentinel API before enabling real checks.
+
+### Monitoring endpoints
+
+- `GET /api/monitors` returns monitors, latest results, uptime, health scores, and simulation/live mode.
+- `GET /api/monitors/history` returns persistent result history; accepts `monitorId` and `limit`.
+- `POST /api/monitors` creates a validated HTTP, TCP, or DNS monitor.
+- `POST /api/monitors/:id/run` runs one monitor immediately.
+- `POST /api/monitors/run-all` runs every enabled monitor.
