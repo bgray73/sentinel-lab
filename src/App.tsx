@@ -10,13 +10,15 @@ const kindMeta: Record<Kind, { label: string; icon: typeof Globe2; className: st
 export default function App() {
   const [tests, setTests] = useState<Test[]>([]); const [run, setRun] = useState<Run | null>(null); const [running, setRunning] = useState(false);
   const [filter, setFilter] = useState<'all' | Kind>('all'); const [query, setQuery] = useState(''); const [modal, setModal] = useState(false);
-  useEffect(() => { fetch('/api/tests').then(r => r.json()).then(setTests).catch(() => {}); }, []);
+  const [error, setError] = useState('');
+  useEffect(() => { fetch('/api/tests').then(async r => { if (!r.ok) throw new Error(await apiError(r)); return r.json(); }).then(setTests).catch(error => setError(error.message)); }, []);
   const results = useMemo(() => new Map((run?.results || []).map(r => [r.id, r])), [run]);
   const visible = tests.filter(t => (filter === 'all' || t.kind === filter) && t.name.toLowerCase().includes(query.toLowerCase()));
-  const passed = run?.results.filter(r => r.status === 'passed').length || 0; const failed = (run?.results.length || 0) - passed;
-  const score = run ? Math.round(passed / run.results.length * 100) : 96;
-  async function runSuite() { setRunning(true); setRun(null); try { const r = await fetch('/api/runs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ simulate: true }) }); setRun(await r.json()); } finally { setRunning(false); } }
-  async function addTest(data: Omit<Test, 'id'>) { const r = await fetch('/api/tests', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); const created = await r.json(); setTests(v => [...v, created]); setModal(false); }
+  const passed = run?.gate.passed || 0; const failed = run ? run.gate.total - passed : 0;
+  const score = run?.gate.score || 0;
+  const medianLatency = run?.results.length ? median(run.results.map(result => result.latency)) : null;
+  async function runSuite() { setRunning(true); setRun(null); setError(''); try { const r = await fetch('/api/runs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ simulate: true }) }); if (!r.ok) throw new Error(await apiError(r)); setRun(await r.json()); } catch (error) { setError(error instanceof Error ? error.message : 'Unable to run suite'); } finally { setRunning(false); } }
+  async function addTest(data: Omit<Test, 'id'>) { setError(''); try { const r = await fetch('/api/tests', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); if (!r.ok) throw new Error(await apiError(r)); const created = await r.json(); setTests(v => [...v, created]); setModal(false); } catch (error) { setError(error instanceof Error ? error.message : 'Unable to add test'); } }
 
   return <div className="shell">
     <aside className="sidebar">
@@ -29,12 +31,13 @@ export default function App() {
     <main>
       <header><button className="mobile-menu"><Menu/></button><div><span className="crumb">Reliability workspace</span><h1>Durability overview</h1></div><div className="header-actions"><div className="environment"><span/> Staging <ChevronDown size={14}/></div><button className="secondary" onClick={() => setModal(true)}><Plus size={17}/> Add test</button><button className="primary" onClick={runSuite} disabled={running}><Play size={16} fill="currentColor"/>{running ? 'Running suite…' : 'Run full suite'}</button></div></header>
       <section className="content">
+        {error && <div className="error-banner" role="alert"><CircleAlert size={17}/><span>{error}</span><button onClick={() => setError('')} aria-label="Dismiss error"><X size={15}/></button></div>}
         <div className="notice"><span className="notice-icon"><ShieldCheck size={19}/></span><div><strong>Release readiness workspace</strong><p>Continuously validate user journeys, API contracts, container health, and LiveNX ↔ LiveWire telemetry before every release.</p></div><button>Configure gates <ChevronDown size={15}/></button></div>
         <div className="metric-grid">
-          <Metric label="Durability score" value={`${score}%`} detail={run ? `${passed} of ${run.results.length} checks passed` : '+2.4% from last release'} icon={Gauge} tone={score > 89 ? 'good' : 'bad'} gauge={score}/>
+          <Metric label="Durability score" value={run ? `${score}%` : '—'} detail={run ? `${passed} of ${run.results.length} checks passed` : 'Run the suite to calculate'} icon={Gauge} tone={run ? (score > 89 ? 'good' : 'bad') : undefined} gauge={run ? score : undefined}/>
           <Metric label="Active checks" value={String(tests.length)} detail="Across 5 test surfaces" icon={Activity}/>
-          <Metric label="Median response" value={run ? `${Math.round(run.results.reduce((a,r)=>a+r.latency,0)/run.results.length)}ms` : '184ms'} detail="Target threshold < 500ms" icon={Timer}/>
-          <Metric label="Regressions" value={String(run ? failed : 2)} detail={run ? failed ? 'Requires review' : 'No regressions found' : '1 critical · 1 moderate'} icon={CircleAlert} tone={failed ? 'bad' : undefined}/>
+          <Metric label="Median response" value={medianLatency === null ? '—' : `${medianLatency}ms`} detail="Target threshold < 500ms" icon={Timer}/>
+          <Metric label="Regressions" value={run ? String(failed) : '—'} detail={run ? failed ? `${run.gate.criticalFailures} release blocking` : 'No regressions found' : 'No run results yet'} icon={CircleAlert} tone={failed ? 'bad' : undefined}/>
         </div>
         <div className="main-grid">
           <section className="panel suite-panel"><div className="panel-head"><div><h2>Test surface</h2><p>Coverage and current state across the stack</p></div><div className="search"><Search size={15}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search checks"/></div></div>
@@ -42,9 +45,9 @@ export default function App() {
             <div className="test-list">{visible.map(test => <TestRow key={test.id} test={test} result={results.get(test.id)} running={running}/>)}</div>
           </section>
           <aside className="right-col">
-            <section className="panel release"><div className="panel-head"><div><h2>Release gate</h2><p>Version 26.2.0-rc3</p></div><span className={failed ? 'gate blocked' : 'gate ready'}>{failed ? 'BLOCKED' : 'READY'}</span></div>
+            <section className="panel release"><div className="panel-head"><div><h2>Release gate</h2><p>{run ? `Run ${run.id.slice(0, 12)}` : 'Awaiting first run'}</p></div><span className={`gate ${run?.gate.status || 'blocked'}`}>{run?.gate.status.toUpperCase() || 'PENDING'}</span></div>
               <div className="ring" style={{'--score': `${score * 3.6}deg`} as React.CSSProperties}><div><strong>{score}</strong><span>/ 100</span></div></div>
-              <div className="gate-row"><span><Check size={14}/> Required checks</span><strong>{run ? `${passed}/${run.results.length}` : '7/8'}</strong></div><div className="gate-row"><span><CircleAlert size={14}/> Blocking issues</span><strong className="red">{run ? failed : 1}</strong></div>
+              <div className="gate-row"><span><Check size={14}/> Required checks</span><strong>{run ? `${passed}/${run.results.length}` : '—'}</strong></div><div className="gate-row"><span><CircleAlert size={14}/> Blocking issues</span><strong className="red">{run ? run.gate.criticalFailures : '—'}</strong></div>
               <button className="wide">View gate details</button>
             </section>
             <section className="panel signals"><div className="panel-head"><div><h2>Live telemetry</h2><p>Integration signals</p></div><span className="live"><i/>LIVE</span></div>
@@ -63,3 +66,6 @@ function Metric({label,value,detail,icon:Icon,tone,gauge}:{label:string,value:st
 function TestRow({test,result,running}:{test:Test,result?:Result,running:boolean}) { const meta=kindMeta[test.kind], Icon=meta.icon; return <div className="test-row"><div className={`test-icon ${meta.className}`}><Icon size={18}/></div><div className="test-name"><strong>{test.name}</strong><span>{meta.label} · {test.critical?'Release blocking':'Advisory'}</span></div><div className="target">{test.target.replace(/^https?:\/\//,'')}</div><div className="latency">{result?`${result.latency}ms`:'—'}</div><div className={`status ${result?.status|| (running?'running':'idle')}`}>{result?.status==='passed'?<Check size={14}/>:result?.status==='failed'?<X size={14}/>:<span/>}{result?.status|| (running?'running':'ready')}</div></div> }
 function Signal({icon:Icon,title,detail,value}:{icon:typeof Activity,title:string,detail:string,value:string}) { return <div className="signal"><span><Icon size={17}/></span><div><strong>{title}</strong><small>{detail}</small></div><em>{value}</em></div> }
 function AddModal({close,save}:{close:()=>void,save:(t:Omit<Test,'id'>)=>void}) { const [name,setName]=useState(''); const [target,setTarget]=useState(''); const [kind,setKind]=useState<Kind>('frontend'); return <div className="modal-wrap" onMouseDown={e=>e.target===e.currentTarget&&close()}><form className="modal" onSubmit={e=>{e.preventDefault();save({name,target,kind,critical:true,timeoutMs:10000})}}><button type="button" className="modal-x" onClick={close}><X/></button><span className="eyebrow">NEW CHECK</span><h2>Add a durability test</h2><p>Define a target and include it in the next release-readiness run.</p><label>Test name<input required value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. LiveNX dashboard login"/></label><label>Surface<select value={kind} onChange={e=>setKind(e.target.value as Kind)}>{Object.entries(kindMeta).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}</select></label><label>Target URL<input required type="url" value={target} onChange={e=>setTarget(e.target.value)} placeholder="https://staging.example.com/health"/></label><div className="modal-actions"><button type="button" className="secondary" onClick={close}>Cancel</button><button className="primary">Add to suite</button></div></form></div> }
+
+function median(values: number[]) { const sorted = [...values].sort((a, b) => a - b); const middle = Math.floor(sorted.length / 2); return Math.round(sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2); }
+async function apiError(response: Response) { try { const body = await response.json(); return body.error || `Request failed (${response.status})`; } catch { return `Request failed (${response.status})`; } }
