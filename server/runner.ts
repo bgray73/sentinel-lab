@@ -1,6 +1,5 @@
-export type TestKind = 'frontend' | 'api' | 'container' | 'livenx' | 'livewire';
-export type TestCase = { id: string; name: string; kind: TestKind; target: string; critical: boolean; timeoutMs: number };
-export type TestResult = TestCase & { status: 'passed' | 'failed'; latency: number; detail: string; timestamp: string };
+import type { Gate, TestCase, TestKind, TestResult } from './types.js';
+export type { TestCase, TestKind, TestResult } from './types.js';
 
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -22,6 +21,14 @@ export async function runTest(test: TestCase, simulate = true): Promise<TestResu
     return { ...test, status: passed ? 'passed' : 'failed', latency: Date.now() - started,
       detail: `HTTP ${response.status} ${response.statusText || (passed ? 'OK' : 'Failed')}`, timestamp: new Date().toISOString() };
   } finally { clearTimeout(timeout); }
+}
+
+export function evaluateGate(results: TestResult[], minScore = 90): Gate {
+  const passed = results.filter(result => result.status === 'passed').length;
+  const total = results.length;
+  const score = total ? Math.round((passed / total) * 100) : 0;
+  const criticalFailures = results.filter(result => result.critical && result.status === 'failed').length;
+  return { status: total > 0 && criticalFailures === 0 && score >= minScore ? 'ready' : 'blocked', score, passed, total, criticalFailures, minScore };
 }
 
 function successDetail(kind: TestKind) {
