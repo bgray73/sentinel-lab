@@ -1,20 +1,24 @@
 import http from 'node:http';
+import https from 'node:https';
 import path from 'node:path';
 import { buildDockerInventory } from './inventory.js';
 import type { DockerApiContainer, DockerApiStats, DockerInventory, DockerResourceStats } from './types.js';
 
-export type DockerConfig = { socketPath: string };
+export type DockerConfig = { socketPath?: string; baseUrl?: string };
 
 export function dockerConfigFromEnvironment(env: NodeJS.ProcessEnv = process.env): DockerConfig | null {
+  const baseUrl=env.DOCKER_HOST_URL;
+  if(baseUrl){const parsed=new URL(baseUrl);if(!['http:','https:'].includes(parsed.protocol)||parsed.username||parsed.password||parsed.pathname!=='/'||parsed.search||parsed.hash)throw new Error('DOCKER_HOST_URL must be an HTTP or HTTPS origin without credentials or a path');return{baseUrl:parsed.origin};}
   const socketPath = env.DOCKER_SOCKET_PATH;
   if (!socketPath) return null;
   if (!path.isAbsolute(socketPath)) throw new Error('DOCKER_SOCKET_PATH must be an absolute path');
   return { socketPath };
 }
 
-function socketRequest<T>(socketPath: string, requestPath: string): Promise<T> {
+function socketRequest<T>(endpoint: string, requestPath: string): Promise<T> {
   return new Promise((resolve, reject) => {
-    const request = http.request({ socketPath, path: requestPath, method: 'GET', headers: { Host: 'localhost' }, timeout: 15_000 }, response => {
+    const remote=endpoint.startsWith('http')?new URL(requestPath,`${endpoint}/`):null;
+    const receive=(response:http.IncomingMessage)=>{
       const chunks: Buffer[] = [];
       response.on('data', chunk => chunks.push(Buffer.from(chunk)));
       response.on('end', () => {
@@ -22,7 +26,8 @@ function socketRequest<T>(socketPath: string, requestPath: string): Promise<T> {
         if (!response.statusCode || response.statusCode < 200 || response.statusCode >= 300) return reject(new Error(`Docker API returned HTTP ${response.statusCode || 'unknown'}`));
         try { resolve(JSON.parse(body) as T); } catch { reject(new Error('Docker API returned invalid JSON')); }
       });
-    });
+    };
+    const request=remote?(remote.protocol==='https:'?https:http).request(remote,{method:'GET',timeout:15_000},receive):http.request({socketPath:endpoint,path:requestPath,method:'GET',headers:{Host:'localhost'},timeout:15_000},receive);
     request.on('timeout', () => request.destroy(new Error('Docker API request timed out')));
     request.on('error', reject);
     request.end();
@@ -30,9 +35,10 @@ function socketRequest<T>(socketPath: string, requestPath: string): Promise<T> {
 }
 
 export async function discoverDocker(config: DockerConfig, requester: typeof socketRequest = socketRequest): Promise<DockerInventory> {
+  const endpoint=config.baseUrl||config.socketPath!;
   const [info, containers] = await Promise.all([
-    requester<{ Name: string; ServerVersion?: string }>(config.socketPath, '/info'),
-    requester<DockerApiContainer[]>(config.socketPath, '/containers/json?all=1')
+    requester<{ Name: string; ServerVersion?: string }>(endpoint, '/info'),
+    requester<DockerApiContainer[]>(endpoint, '/containers/json?all=1')
   ]);
   return buildDockerInventory(containers, 'docker', info.Name || 'Docker Engine', info.ServerVersion);
 }
@@ -44,5 +50,5 @@ export function normalizeDockerStats(containerId:string,stats:DockerApiStats):Do
 }
 
 export async function collectDockerStats(config:DockerConfig,containerIds:string[],requester:typeof socketRequest=socketRequest) {
-  return Promise.all(containerIds.map(async id=>normalizeDockerStats(id,await requester<DockerApiStats>(config.socketPath,`/containers/${encodeURIComponent(id)}/stats?stream=false`))));
+  const endpoint=config.baseUrl||config.socketPath!;return Promise.all(containerIds.map(async id=>normalizeDockerStats(id,await requester<DockerApiStats>(endpoint,`/containers/${encodeURIComponent(id)}/stats?stream=false`))));
 }

@@ -12,6 +12,8 @@ describe('Docker inventory', () => {
   it('requires an explicitly configured absolute socket path', () => {
     expect(dockerConfigFromEnvironment({})).toBeNull();
     expect(() => dockerConfigFromEnvironment({ DOCKER_SOCKET_PATH: 'docker.sock' })).toThrow('absolute path');
+    expect(dockerConfigFromEnvironment({DOCKER_HOST_URL:'http://docker-socket-proxy:2375'})).toEqual({baseUrl:'http://docker-socket-proxy:2375'});
+    expect(()=>dockerConfigFromEnvironment({DOCKER_HOST_URL:'http://user:pass@proxy:2375'})).toThrow(/without credentials/);
   });
 
   it('provides a safe simulated application inventory', () => {
@@ -29,4 +31,3 @@ describe('Docker inventory', () => {
     expect(requester.mock.calls.map(call => call[1])).toEqual(['/info', '/containers/json?all=1']);
   });
 });
-

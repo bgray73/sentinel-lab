@@ -11,6 +11,7 @@ const fileSources = (env: NodeJS.ProcessEnv) => [
   ['cmdb.json', env.SENTINEL_CMDB_FILE || resolve('.sentinel/cmdb.json')],
   ['hardware-operations.json', env.SENTINEL_HARDWARE_OPERATIONS_FILE || resolve('.sentinel/hardware-operations.json')],
   ['security-audit.json', env.SENTINEL_AUTH_AUDIT_FILE || resolve('.sentinel/security-audit.json')]
+  ,['collectors.json', env.SENTINEL_COLLECTOR_FILE || resolve('.sentinel/collectors.json')]
 ] as const;
 
 export class BackupService {
