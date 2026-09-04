@@ -1,0 +1,52 @@
+services:
+  loki:
+    image: ${LOKI_IMAGE:-grafana/loki:3.7.0}
+    command: -config.file=/etc/loki/config.yml
+    restart: unless-stopped
+    volumes:
+      - ./loki-config.yml:/etc/loki/config.yml:ro
+      - loki-data:/loki
+    networks: [observability]
+
+  grafana:
+    image: ${GRAFANA_IMAGE:-grafana/grafana:latest}
+    restart: unless-stopped
+    depends_on: [loki]
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:?Set GRAFANA_ADMIN_USER in .env}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD in .env}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+    ports:
+      - "${GRAFANA_BIND_ADDRESS:-127.0.0.1}:${GRAFANA_PORT:-3000}:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    networks: [observability]
+
+  alloy:
+    image: ${ALLOY_IMAGE:-grafana/alloy:latest}
+    command: run --server.http.listen-addr=0.0.0.0:12345 --storage.path=/var/lib/alloy/data /etc/alloy/config.alloy
+    restart: unless-stopped
+    user: "0"
+    depends_on: [loki]
+    ports:
+      - "${ALLOY_BIND_ADDRESS:-127.0.0.1}:12345:12345"
+      - "${SYSLOG_BIND_ADDRESS:-127.0.0.1}:5514:5514/tcp"
+      - "${SYSLOG_BIND_ADDRESS:-127.0.0.1}:5514:5514/udp"
+    volumes:
+      - ./alloy-config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/log/journal:/var/log/journal:ro
+      - /run/log/journal:/run/log/journal:ro
+      - /etc/machine-id:/etc/machine-id:ro
+      - alloy-data:/var/lib/alloy/data
+    networks: [observability]
+
+networks:
+  observability:
+
+volumes:
+  loki-data:
+  grafana-data:
+  alloy-data:
