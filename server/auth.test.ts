@@ -64,6 +64,15 @@ describe('authentication and authorization', () => {
     expect((await fetch(`${base}/api/backups`, { headers: admin })).status).toBe(503);
   });
 
+  it('allows collector visibility but restricts enrollment to administrators', async () => {
+    const base = await start(config);
+    const viewer = proxyHeaders('viewer', 'everyone');
+    expect((await fetch(`${base}/api/collectors`, { headers: viewer })).status).toBe(503);
+    expect((await fetch(`${base}/api/collectors`, { method: 'POST', headers: viewer })).status).toBe(403);
+    const admin = proxyHeaders('admin', 'admins');
+    expect((await fetch(`${base}/api/collectors`, { method: 'POST', headers: admin })).status).toBe(503);
+  });
+
   async function start(auth: AuthConfig) {
     store = new Store(':memory:');
     server = createApp(store, undefined, undefined, undefined, undefined, undefined, new StructuredLogger(() => {}), auth, new SecurityAuditService({}, false)).listen(0, '127.0.0.1');

@@ -1,0 +1,49 @@
+services:
+  sentinel-collector:
+    image: ${SENTINEL_IMAGE:-ghcr.io/bgray73/sentinel-lab:latest}
+    command: ["node", "server-dist/collector/agent.js"]
+    restart: unless-stopped
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    environment:
+      SENTINEL_URL: ${SENTINEL_URL:?set the central Sentinel URL}
+      SENTINEL_COLLECTOR_TOKEN: ${SENTINEL_COLLECTOR_TOKEN:?enroll this collector in Sentinel}
+      SENTINEL_COLLECTOR_INTERVAL_SECONDS: ${SENTINEL_COLLECTOR_INTERVAL_SECONDS:-60}
+      SENTINEL_COLLECTOR_OUTBOX: /var/lib/sentinel-collector/outbox.json
+      PVE_URL: ${PVE_URL:-}
+      PVE_TOKEN_ID: ${PVE_TOKEN_ID:-}
+      PVE_TOKEN_SECRET: ${PVE_TOKEN_SECRET:-}
+      DOCKER_HOST_URL: http://docker-socket-proxy:2375
+    volumes:
+      - sentinel-collector-state:/var/lib/sentinel-collector
+    networks: [default, collector-socket]
+    depends_on: [docker-socket-proxy]
+    tmpfs:
+      - "/tmp:size=16m,mode=1777"
+
+  docker-socket-proxy:
+    image: ghcr.io/tecnativa/docker-socket-proxy:0.5.0
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    environment:
+      CONTAINERS: 1
+      INFO: 1
+      POST: 0
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [collector-socket]
+    tmpfs:
+      - "/run:size=8m,mode=0755"
+      - "/tmp:size=8m,mode=1777"
+      - "/var/lib/haproxy:size=8m,mode=0755"
+
+volumes:
+  sentinel-collector-state:
+
+networks:
+  collector-socket:
+    internal: true

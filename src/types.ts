@@ -58,7 +58,7 @@ export type DockerInventory = {
   containers: DockerContainer[];
   summary: { total: number; running: number; stopped: number; healthy: number; unhealthy: number; composeProjects: number };
 };
-export type ConnectionStatus = { proxmox: { configured: boolean }; docker: { configured: boolean }; redfish:{configured:boolean;targets:number}; snmp:{configured:boolean;targets:number} };
+export type ConnectionStatus = { proxmox: { configured: boolean }; docker: { configured: boolean }; redfish:{configured:boolean;targets:number}; snmp:{configured:boolean;targets:number};collectors:{configured:boolean;targets:number;online:number} };
 export type HardwareComponent={id:string;name:string;type:string;health:HealthStatus;value?:number;unit?:string;detail?:string};
 export type HardwareDevice={id:string;externalId:string;name:string;source:'redfish'|'snmp';category:'physical_server'|'switch'|'router'|'ups'|'pdu'|'storage_appliance'|'other';health:HealthStatus;status:string;manufacturer?:string;model?:string;serialNumber?:string;firmwareVersion?:string;managementAddress:string;metrics:Record<string,number|undefined>;components:HardwareComponent[];attributes:Record<string,string|number|boolean|null>;collectedAt:string};
 export type HardwareInventory={mode:'simulation'|'live';collectedAt:string;devices:HardwareDevice[];summary:{devices:number;servers:number;networkDevices:number;powerDevices:number;healthy:number;warnings:number;critical:number;components:number}};
@@ -126,3 +126,7 @@ export interface SecurityEvent { id:string;timestamp:string;type:SecurityEventTy
 export interface SecuritySnapshot { events:SecurityEvent[];summary:{retained:number;failures:number;denied:number;sessions:number};retention:{days:number;maxEvents:number} }
 export interface BackupSummary { id:string;createdAt:string;reason:'manual'|'scheduled';files:number;bytes:number;verified:boolean;error?:string }
 export interface BackupSnapshot { enabled:boolean;intervalHours:number;maxBackups:number;lastError:string;backups:BackupSummary[];summary:{count:number;verified:number;latestAt:string|null} }
+export type CollectorKind='proxmox'|'docker'|'hybrid';
+export type CollectorView={id:string;name:string;site:string;kind:CollectorKind;intervalSeconds:number;createdAt:string;lastSeenAt?:string;lastSequence?:number;status:'online'|'stale'|'never';ageSeconds:number|null;version:string|null;summary:{proxmoxResources:number;dockerContainers:number;warnings:number;errors:number}};
+export type SiteView={name:string;collectors:number;online:number;stale:number;nodes:number;virtualMachines:number;lxcContainers:number;dockerContainers:number;warnings:number};
+export type CollectorDashboardSnapshot={collectors:CollectorView[];sites:SiteView[];summary:{collectors:number;sites:number;online:number;stale:number;never:number;resources:number;warnings:number}};
