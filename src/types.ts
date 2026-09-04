@@ -62,6 +62,10 @@ export type ConnectionStatus = { proxmox: { configured: boolean }; docker: { con
 export type HardwareComponent={id:string;name:string;type:string;health:HealthStatus;value?:number;unit?:string;detail?:string};
 export type HardwareDevice={id:string;externalId:string;name:string;source:'redfish'|'snmp';category:'physical_server'|'switch'|'router'|'ups'|'pdu'|'storage_appliance'|'other';health:HealthStatus;status:string;manufacturer?:string;model?:string;serialNumber?:string;firmwareVersion?:string;managementAddress:string;metrics:Record<string,number|undefined>;components:HardwareComponent[];attributes:Record<string,string|number|boolean|null>;collectedAt:string};
 export type HardwareInventory={mode:'simulation'|'live';collectedAt:string;devices:HardwareDevice[];summary:{devices:number;servers:number;networkDevices:number;powerDevices:number;healthy:number;warnings:number;critical:number;components:number}};
+export type HardwareFinding={id:string;deviceId:string;deviceName:string;kind:string;severity:'warning'|'critical';title:string;detail:string;value?:number;unit?:string;status:'active'|'resolved';suppressed:boolean;firstSeenAt:string;lastSeenAt:string;resolvedAt?:string};
+export type MaintenanceWindow={id:string;deviceId:string;reason:string;startsAt:string;endsAt:string;createdAt:string};
+export type FirmwareBaseline={deviceId:string;firmwareVersion:string;model:string;serialNumber:string;recordedAt:string};
+export type HardwareOperations={findings:HardwareFinding[];maintenanceWindows:MaintenanceWindow[];firmwareBaselines:FirmwareBaseline[];summary:{active:number;critical:number;warnings:number;suppressed:number;maintenance:number;baselines:number}};
 
 export type MonitorProtocol = 'http' | 'tcp' | 'dns';
 export type MonitorResult = { id: string; monitorId: string; status: 'up' | 'down'; latencyMs: number; detail: string; checkedAt: string };

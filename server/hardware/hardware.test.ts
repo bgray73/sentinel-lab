@@ -1,9 +1,15 @@
+import { mkdtemp, rm } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { HardwareService } from './service.js';
+import { evaluateHardware, hardwareThresholdsFromEnvironment, reconcileFindings } from './operations.js';
+import { simulatedHardwareInventory } from './inventory.js';
 import { normalizeSnmp, parsePrometheus, snmpConfigFromEnvironment } from './snmp.js';
 import { discoverRedfish, redfishTargetsFromEnvironment } from './redfish.js';
 
-afterEach(() => vi.unstubAllGlobals());
+const directories:string[]=[];
+afterEach(async () => { vi.unstubAllGlobals(); await Promise.all(directories.splice(0).map(directory=>rm(directory,{recursive:true,force:true}))); });
 
 describe('hardware discovery', () => {
   it('requires secure Redfish endpoints by default', () => {
@@ -15,6 +21,10 @@ describe('hardware discovery', () => {
   it('requires an exporter when SNMP targets are configured', () => {
     const targets = JSON.stringify([{ id:'core', name:'Core', target:'10.0.0.2', category:'switch' }]);
     expect(() => snmpConfigFromEnvironment({ SENTINEL_SNMP_TARGETS:targets })).toThrow('SNMP_EXPORTER_URL');
+  });
+
+  it('rejects inconsistent operational thresholds',()=>{
+    expect(()=>hardwareThresholdsFromEnvironment({HARDWARE_TEMPERATURE_WARNING_C:'90',HARDWARE_TEMPERATURE_CRITICAL_C:'80'})).toThrow('inconsistent');
   });
 
   it('normalizes interface and UPS metrics from Prometheus text', () => {
@@ -40,9 +50,31 @@ describe('hardware discovery', () => {
   });
 
   it('starts safely with representative simulated hardware', async () => {
-    const service = new HardwareService({}); await service.ready;
+    const directory=await mkdtemp(path.join(os.tmpdir(),'sentinel-hardware-'));directories.push(directory);
+    const operationsFile=path.join(directory,'operations.json');const service = new HardwareService({SENTINEL_HARDWARE_OPERATIONS_FILE:operationsFile}); await service.ready;
     expect(service.status().mode).toBe('simulation');
     expect(service.inventory().summary.devices).toBeGreaterThanOrEqual(5);
     expect(service.inventory().devices.some(device => device.category === 'ups')).toBe(true);
+    expect(service.operations().summary.active).toBeGreaterThan(0);
+    await service.recordBaseline('dell-r640-01');
+    const start=new Date();const end=new Date(start.getTime()+3_600_000);await service.addMaintenance({deviceId:'dell-r440-02',reason:'Firmware update',startsAt:start.toISOString(),endsAt:end.toISOString()});
+    const restored=new HardwareService({SENTINEL_HARDWARE_OPERATIONS_FILE:operationsFile});await restored.ready;
+    expect(restored.operations().summary).toMatchObject({baselines:1,maintenance:1});
+  });
+
+  it('detects threshold violations, firmware drift, and maintenance suppression', () => {
+    const inventory=simulatedHardwareInventory();const ups=inventory.devices.find(device=>device.category==='ups')!;ups.metrics.batteryMinutesRemaining=8;ups.metrics.loadPercent=95;
+    const server=inventory.devices.find(device=>device.id==='dell-r640-01')!;
+    const candidates=evaluateHardware(inventory,[{deviceId:server.id,firmwareVersion:'6.0.0',model:server.model||'',serialNumber:server.serialNumber||'',recordedAt:new Date().toISOString()}]);
+    expect(candidates.map(item=>item.kind)).toEqual(expect.arrayContaining(['ups_runtime','ups_load','firmware_drift']));
+    const now=new Date('2026-09-04T12:00:00Z');const findings=reconcileFindings(candidates,[],[{id:'mw',deviceId:ups.id,reason:'Battery test',startsAt:'2026-09-04T11:00:00Z',endsAt:'2026-09-04T13:00:00Z',createdAt:'2026-09-04T10:00:00Z'}],now);
+    expect(findings.filter(item=>item.deviceId===ups.id).every(item=>item.suppressed)).toBe(true);
+    expect(findings.find(item=>item.kind==='firmware_drift')?.suppressed).toBe(false);
+  });
+
+  it('resolves a finding when the condition clears', () => {
+    const inventory=simulatedHardwareInventory();const candidates=evaluateHardware(inventory);const active=reconcileFindings(candidates,[],[],new Date('2026-09-04T12:00:00Z'));
+    const resolved=reconcileFindings([],active,[],new Date('2026-09-04T12:05:00Z'));
+    expect(resolved.every(item=>item.status==='resolved'&&item.resolvedAt)).toBe(true);
   });
 });

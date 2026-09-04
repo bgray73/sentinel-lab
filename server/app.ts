@@ -1,4 +1,5 @@
 import express from 'express';
+import { timingSafeEqual } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { evaluateGate, runTest } from './runner.js';
@@ -42,7 +43,7 @@ export function createApp(store: Store, monitoring?: MonitoringService, telemetr
   });
   app.get('/metrics',async(_req,res)=>{
     if(!monitoring)return res.status(503).type('text/plain').send('Monitoring service is not available\n');
-    await monitoring.ready;if(telemetry)await telemetry.ready;res.set('Content-Type','text/plain; version=0.0.4; charset=utf-8');return res.send(`${monitoring.prometheus()}${telemetry?.prometheus()||''}`);
+    await monitoring.ready;if(telemetry)await telemetry.ready;if(hardware)await hardware.ready;res.set('Content-Type','text/plain; version=0.0.4; charset=utf-8');return res.send(`${monitoring.prometheus()}${telemetry?.prometheus()||''}${hardware?.prometheus()||''}`);
   });
   app.get('/api/infrastructure/metrics/status',async(_req,res)=>{if(!telemetry)return res.status(503).json({error:'Telemetry service is not available'});await telemetry.ready;return res.json(telemetry.status())});
   app.get('/api/infrastructure/metrics',async(req,res)=>{if(!telemetry)return res.status(503).json({error:'Telemetry service is not available'});try{await telemetry.ready;return res.json(telemetry.metrics(typeof req.query.range==='string'?req.query.range:'24h'))}catch(error){return res.status(400).json({error:error instanceof Error?error.message:'Invalid telemetry range'})}});
@@ -108,6 +109,31 @@ export function createApp(store: Store, monitoring?: MonitoringService, telemetr
     if (!hardware) return res.status(503).json({ error: 'Hardware service is not available' });
     try { await hardware.ready; return res.json(await hardware.refresh()); }
     catch (error) { return res.status(502).json({ error: error instanceof Error ? error.message : 'Hardware discovery failed' }); }
+  });
+  app.get('/api/hardware/operations', async (_req, res) => {
+    if (!hardware) return res.status(503).json({ error: 'Hardware service is not available' });
+    await hardware.ready; return res.json(hardware.operations());
+  });
+  app.post('/api/hardware/maintenance', async (req, res) => {
+    if (!hardware) return res.status(503).json({ error: 'Hardware service is not available' });
+    try { await hardware.ready; return res.status(201).json(await hardware.addMaintenance(req.body || {})); }
+    catch (error) { return res.status(400).json({ error: error instanceof Error ? error.message : 'Invalid maintenance window' }); }
+  });
+  app.delete('/api/hardware/maintenance/:id', async (req, res) => {
+    if (!hardware) return res.status(503).json({ error: 'Hardware service is not available' });
+    try { await hardware.ready; return res.json(await hardware.removeMaintenance(req.params.id)); }
+    catch (error) { return res.status(404).json({ error: error instanceof Error ? error.message : 'Maintenance window not found' }); }
+  });
+  app.post('/api/hardware/baselines/:deviceId', async (req, res) => {
+    if (!hardware) return res.status(503).json({ error: 'Hardware service is not available' });
+    try { await hardware.ready; return res.status(201).json(await hardware.recordBaseline(req.params.deviceId)); }
+    catch (error) { return res.status(400).json({ error: error instanceof Error ? error.message : 'Unable to record firmware baseline' }); }
+  });
+  app.get('/api/integrations/labops/v1/snapshot', async (req, res) => {
+    if (!cmdb || !hardware) return res.status(503).json({ error: 'CMDB and hardware services are required' });
+    const token=process.env.LABOPS_EXPORT_TOKEN; if(!token)return res.status(503).json({error:'LabOps export is not configured'});
+    const supplied=String(req.headers.authorization||'').replace(/^Bearer\s+/i,'');const expected=Buffer.from(token);const actual=Buffer.from(supplied);if(expected.length!==actual.length||!timingSafeEqual(expected,actual))return res.status(401).json({error:'Unauthorized'});
+    await Promise.all([cmdb.ready,hardware.ready]);return res.json({schemaVersion:1,generatedAt:new Date().toISOString(),producer:{name:'sentinel-lab',mode:hardware.status().mode},cmdb:{status:cmdb.status(),items:cmdb.list(),relationships:cmdb.relationships()},hardware:{inventory:hardware.inventory(),operations:hardware.operations()},links:{prometheus:'/metrics',health:'/api/health'}});
   });
   app.get('/api/logs', async (req, res) => {
     if (!logs) return res.status(503).json({ error: 'Logging service is not available' });

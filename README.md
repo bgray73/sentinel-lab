@@ -231,6 +231,31 @@ docker compose --profile hardware up -d
 
 The example uses SNMPv3 `authPriv`; Sentinel sends only a target, module, and auth-profile name to the exporter, so device credentials stay centralized in the exporter. Its port binds to loopback by default. The new endpoints are `GET /api/hardware/status`, `GET /api/hardware/inventory`, and `POST /api/hardware/discover`.
 
+## Stage 11: hardware operations and drift
+
+Stage 11 turns the Stage 10 inventory into actionable, retained findings without duplicating LabOps' authoritative incident workflow. Sentinel evaluates device and component health, temperature, power-capacity utilization, UPS runtime and load, interface errors, and accepted firmware baselines after every hardware collection. Findings automatically resolve when a condition clears.
+
+Planned work can be placed into a device-specific or global maintenance window. A finding remains visible and auditable during maintenance, but is marked suppressed and excluded from actionable warning and critical totals. The Hardware page includes quick two-hour maintenance windows and firmware-baseline controls; custom windows are available through the API.
+
+Operations data is stored in `.sentinel/hardware-operations.json` by default with owner-only file permissions. Override the location with `SENTINEL_HARDWARE_OPERATIONS_FILE`. Default thresholds are intentionally conservative and can be adjusted with:
+
+```bash
+export HARDWARE_TEMPERATURE_WARNING_C=70
+export HARDWARE_TEMPERATURE_CRITICAL_C=80
+export HARDWARE_POWER_WARNING_PERCENT=80
+export HARDWARE_POWER_CRITICAL_PERCENT=90
+export HARDWARE_UPS_RUNTIME_WARNING_MINUTES=20
+export HARDWARE_UPS_RUNTIME_CRITICAL_MINUTES=10
+export HARDWARE_UPS_LOAD_WARNING_PERCENT=80
+export HARDWARE_UPS_LOAD_CRITICAL_PERCENT=90
+export HARDWARE_INTERFACE_ERRORS_WARNING=100
+export HARDWARE_INTERFACE_ERRORS_CRITICAL=10000
+```
+
+Stage 11 adds `GET /api/hardware/operations`, `POST /api/hardware/maintenance`, `DELETE /api/hardware/maintenance/:id`, and `POST /api/hardware/baselines/:deviceId`. Active findings and device health are also included in `/metrics` for Prometheus. LabOps can consume these stable outputs and remain the final owner of incidents, maintenance governance, and operator notifications.
+
+For the planned LabOps integration, set a long random `LABOPS_EXPORT_TOKEN` and call `GET /api/integrations/labops/v1/snapshot` with `Authorization: Bearer <token>`. The versioned response combines CMDB items and relationships with current hardware inventory, findings, maintenance state, and firmware baselines. The endpoint stays disabled until a token is configured; expose it only on the trusted management network or behind LabOps OIDC.
+
 ### Run the included observability stack
 
 The `deploy/observability` directory contains a small-lab, single-binary Loki deployment, Grafana with a provisioned Loki data source, and Grafana Alloy collection for Docker, systemd journal, and TCP/UDP syslog.

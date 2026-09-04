@@ -13,7 +13,7 @@ async function services() {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'sentinel-cmdb-'));
   directories.push(directory);
   const monitoring = new MonitoringService({ SENTINEL_DATA_FILE: path.join(directory, 'monitoring.json') });
-  const hardware = new HardwareService({});
+  const hardware = new HardwareService({ SENTINEL_HARDWARE_OPERATIONS_FILE: path.join(directory, 'hardware-operations.json') });
   const cmdb = new CmdbService({ SENTINEL_CMDB_FILE: path.join(directory, 'cmdb.json') }, monitoring, hardware);
   await Promise.all([monitoring.ready, hardware.ready, cmdb.ready]);
   return cmdb;
