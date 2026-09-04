@@ -14,13 +14,15 @@ describe('backup and recovery', () => {
     directory = await mkdtemp(join(tmpdir(), 'sentinel-backup-'));
     const databasePath = join(directory, 'live', 'sentinel.db');
     const monitoringPath = join(directory, 'live', 'monitoring.json');
-    const env = { DATABASE_PATH: databasePath, SENTINEL_DATA_FILE: monitoringPath, SENTINEL_BACKUP_DIR: join(directory, 'backups'), SENTINEL_RESTORE_POINT_DIR: join(directory, 'restore-points'), SENTINEL_BACKUP_MAX_COUNT: '3' };
+    const env = { DATABASE_PATH: databasePath, SENTINEL_DATA_FILE: monitoringPath, SENTINEL_BACKUP_DIR: join(directory, 'backups'), SENTINEL_BACKUP_REPLICA_DIR: join(directory, 'replica'), SENTINEL_RESTORE_POINT_DIR: join(directory, 'restore-points'), SENTINEL_BACKUP_MAX_COUNT: '3' };
     const store = new Store(databasePath);
     store.insertTest({ id: 'before-backup', name: 'Before backup', kind: 'api', target: 'https://example.test', critical: false, timeoutMs: 1000 });
     await writeFile(monitoringPath, '{"version":"before"}');
     const service = new BackupService(store, env, false);
     const backup = await service.create('manual');
     expect(backup.verified).toBe(true);
+    expect(backup.replicated).toBe(true);
+    expect(await readFile(join(env.SENTINEL_BACKUP_REPLICA_DIR, backup.id, 'manifest.json'), 'utf8')).toContain(backup.id);
     expect((await service.verify(backup.id)).verified).toBe(true);
 
     store.insertTest({ id: 'after-backup', name: 'After backup', kind: 'api', target: 'https://example.test', critical: false, timeoutMs: 1000 });

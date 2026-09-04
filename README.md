@@ -379,7 +379,7 @@ docker compose -f docker-compose.oidc.yml up -d
 
 Every restore verifies SHA-256 checksums first and preserves the current files under `/var/lib/sentinel/restore-points`. For an application-only problem, roll back `SENTINEL_IMAGE` to the previous immutable `sha-...` tag instead of restoring data. See `deploy/sentinel/RECOVERY.md` for the complete checklist.
 
-The default backup directory is on the Sentinel data volume. That protects against bad upgrades but not host or disk loss. Mount `/var/lib/sentinel/backups` from a NAS or separately protected filesystem using the included backup-target override example, and perform a test restore regularly.
+The default backup directory is on the Sentinel data volume. That protects against bad upgrades but not host or disk loss. Stage 17 adds a separately verified replica target so the local recovery point remains available while a second copy is written to a NAS or protected filesystem.
 
 ## Stage 16: distributed collectors and multi-site monitoring
 
@@ -388,3 +388,15 @@ Sentinel can now enroll outbound-only collectors for remote Proxmox clusters, Do
 The **Sites** dashboard shows online, stale, and never-connected collectors, agent versions, remote workload totals, site-level warnings, and last heartbeat age. Online remote inventories are reconciled into the CMDB with site and collector identifiers, while the most recent snapshot remains visible when a collector is offline. Prometheus exports collector count, online count, stale count, and remote-resource count.
 
 The lightweight agent buffers up to 100 snapshots on disk when Sentinel cannot be reached and sends them in order after service recovers. See `deploy/sentinel/COLLECTORS.md` and `docker-compose.collector.yml.example` for enrollment, least-privilege configuration, token rotation, and deployment guidance.
+
+## Stage 17: integrations, ticket automation, and backup replication
+
+The **Automation** page now reports generic webhook, Slack, Microsoft Teams, SMTP, and ServiceNow route readiness. Each open, reminder, and resolved incident event creates an independent delivery record. Failed attempts do not block monitor execution and can be retried by an operator without resending successful channels.
+
+ServiceNow integration uses the Incident Table API. Sentinel creates one external incident with its own incident ID as the correlation ID, appends reminders to that record, and closes it when the monitor recovers. The returned ticket number and link are stored with the Sentinel incident and displayed in Automation. Configure a dedicated least-privilege integration account with either a bearer token or username/password.
+
+Sensitive settings support Docker-style secret files. Set a direct variable such as `SENTINEL_SLACK_WEBHOOK_URL`, or leave it empty and set `SENTINEL_SLACK_WEBHOOK_URL_FILE=/run/secrets/slack_webhook`. This also applies to ServiceNow credentials, SMTP and generic webhook URLs, the Proxmox token secret, Sentinel service tokens, and remote collector tokens.
+
+Set `SENTINEL_BACKUP_REPLICA_DIR` to a separately mounted target to copy every verified primary recovery point. Sentinel publishes each replica atomically and verifies the same SHA-256 manifest after copying. The **Recovery** page reports replica coverage and can retry a missing or failed copy; Prometheus exports `sentinel_backups_replicated`.
+
+New endpoints are `GET /api/automation`, `POST /api/notifications/:id/retry`, and `POST /api/backups/:id/replicate`. See `deploy/sentinel/INTEGRATIONS.md` for configuration and the backup-target Compose override.

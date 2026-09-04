@@ -45,15 +45,19 @@ export type Incident = {
   acknowledgedAt?: string;
   resolvedAt?: string;
   lastNotificationAt?: string;
+  externalTicket?: { provider: 'servicenow'; id: string; number: string; url?: string; updatedAt: string };
 };
+export type NotificationChannel = 'webhook' | 'slack' | 'teams' | 'email' | 'servicenow' | 'simulation';
 export type NotificationDelivery = {
   id: string;
   incidentId: string;
-  channel: 'webhook' | 'email' | 'simulation';
+  channel: NotificationChannel;
   event: 'opened' | 'reminder' | 'resolved';
   status: 'sent' | 'failed' | 'simulated';
   detail: string;
   attemptedAt: string;
+  attempt: number;
+  retryOf?: string;
 };
 export type DependencyMapping = { id: string; monitorId: string; resourceId: string; createdAt: string };
 export type RetentionPolicy = { days:number; maxResults:number };

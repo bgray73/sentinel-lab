@@ -2,6 +2,7 @@ import { timingSafeEqual } from 'node:crypto';
 import type { NextFunction, Request, Response } from 'express';
 import type { StructuredLogger } from './logging/logger.js';
 import type { SecurityAuditService } from './security/service.js';
+import { secretFromEnvironment } from './config/secrets.js';
 
 export type AuthMode = 'disabled' | 'proxy';
 export type Role = 'viewer' | 'operator' | 'admin';
@@ -32,11 +33,11 @@ export function authConfigFromEnvironment(env: NodeJS.ProcessEnv = process.env):
   const mode: AuthMode = requestedMode;
   const config: AuthConfig = {
     mode,
-    proxySecret: env.SENTINEL_AUTH_PROXY_SECRET,
+    proxySecret: secretFromEnvironment(env, 'SENTINEL_AUTH_PROXY_SECRET'),
     adminGroups: list(env.SENTINEL_AUTH_ADMIN_GROUPS || 'sentinel-admins'),
     operatorGroups: list(env.SENTINEL_AUTH_OPERATOR_GROUPS || 'sentinel-operators'),
-    metricsToken: env.SENTINEL_METRICS_TOKEN,
-    labopsToken: env.LABOPS_EXPORT_TOKEN
+    metricsToken: secretFromEnvironment(env, 'SENTINEL_METRICS_TOKEN'),
+    labopsToken: secretFromEnvironment(env, 'LABOPS_EXPORT_TOKEN')
   };
   if (mode === 'proxy' && !strongSecret(config.proxySecret)) throw new Error('SENTINEL_AUTH_PROXY_SECRET must contain at least 32 characters in proxy mode');
   if (config.metricsToken && !strongSecret(config.metricsToken)) throw new Error('SENTINEL_METRICS_TOKEN must contain at least 32 characters when configured');
@@ -109,6 +110,7 @@ function requiredRole(req: Request): Role {
     /^\/api\/monitors\/(run-all|[^/]+\/run)$/,
     /^\/api\/alerts\/[^/]+\/suppress$/,
     /^\/api\/incidents\/[^/]+\/acknowledge$/,
+    /^\/api\/notifications\/[^/]+\/retry$/,
     /^\/api\/topology\/mappings(?:\/[^/]+)?$/,
     /^\/api\/infrastructure\/metrics\/collect$/,
     /^\/api\/cmdb\/reconcile$/,

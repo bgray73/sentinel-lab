@@ -71,6 +71,11 @@ export function createApp(store: Store, monitoring?: MonitoringService, telemetr
     const result = await backups.verify(req.params.id);
     return res.status(result.verified ? 200 : 422).json(result);
   });
+  app.post('/api/backups/:id/replicate', async (req, res) => {
+    if (!backups) return res.status(503).json({ error: 'Backup service is not available' });
+    try { return res.json(await backups.replicate(req.params.id)); }
+    catch (error) { return res.status(400).json({ error: error instanceof Error ? error.message : 'Backup replication failed' }); }
+  });
   app.get('/api/monitors', async (_req, res) => {
     if (!monitoring) return res.status(503).json({ error: 'Monitoring service is not available' });
     await monitoring.ready; return res.json({ mode: monitoring.mode(), monitors: monitoring.list() });
@@ -177,7 +182,7 @@ export function createApp(store: Store, monitoring?: MonitoringService, telemetr
   });
   app.get('/api/integrations/labops/v1/snapshot', async (req, res) => {
     if (!cmdb || !hardware) return res.status(503).json({ error: 'CMDB and hardware services are required' });
-    const token=process.env.LABOPS_EXPORT_TOKEN; if(!token)return res.status(503).json({error:'LabOps export is not configured'});
+    const token=auth.labopsToken; if(!token)return res.status(503).json({error:'LabOps export is not configured'});
     const supplied=String(req.headers.authorization||'').replace(/^Bearer\s+/i,'');const expected=Buffer.from(token);const actual=Buffer.from(supplied);if(expected.length!==actual.length||!timingSafeEqual(expected,actual))return res.status(401).json({error:'Unauthorized'});
     await Promise.all([cmdb.ready,hardware.ready]);return res.json({schemaVersion:1,generatedAt:new Date().toISOString(),producer:{name:'sentinel-lab',mode:hardware.status().mode},cmdb:{status:cmdb.status(),items:cmdb.list(),relationships:cmdb.relationships()},hardware:{inventory:hardware.inventory(),operations:hardware.operations()},links:{prometheus:'/metrics',health:'/api/health'}});
   });
@@ -233,6 +238,15 @@ export function createApp(store: Store, monitoring?: MonitoringService, telemetr
   app.get('/api/notifications', async (req, res) => {
     if (!monitoring) return res.status(503).json({ error: 'Monitoring service is not available' });
     await monitoring.ready; return res.json({ status: monitoring.notificationStatus(), deliveries: monitoring.deliveries(Number(req.query.limit || 100)) });
+  });
+  app.get('/api/automation', async (_req, res) => {
+    if (!monitoring) return res.status(503).json({ error: 'Monitoring service is not available' });
+    await monitoring.ready; return res.json(monitoring.automation());
+  });
+  app.post('/api/notifications/:id/retry', async (req, res) => {
+    if (!monitoring) return res.status(503).json({ error: 'Monitoring service is not available' });
+    try { await monitoring.ready; return res.json(await monitoring.retryDelivery(req.params.id)); }
+    catch (error) { return res.status(404).json({ error: error instanceof Error ? error.message : 'Delivery not found' }); }
   });
   app.get('/api/topology', async (req, res) => {
     if (!monitoring) return res.status(503).json({ error: 'Monitoring service is not available' });
