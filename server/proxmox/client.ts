@@ -1,5 +1,6 @@
 import { buildInventory } from './inventory.js';
 import type { ProxmoxApiResource, ProxmoxInventory } from './types.js';
+import { secretFromEnvironment } from '../config/secrets.js';
 
 export type ProxmoxConfig = {
   baseUrl: string;
@@ -10,7 +11,7 @@ export type ProxmoxConfig = {
 export function configFromEnvironment(env: NodeJS.ProcessEnv = process.env): ProxmoxConfig | null {
   const baseUrl = env.PVE_URL?.replace(/\/$/, '');
   const tokenId = env.PVE_TOKEN_ID;
-  const tokenSecret = env.PVE_TOKEN_SECRET;
+  const tokenSecret = secretFromEnvironment(env, 'PVE_TOKEN_SECRET');
   if (!baseUrl || !tokenId || !tokenSecret) return null;
   const url = new URL(baseUrl);
   if (url.protocol !== 'https:' && env.PVE_ALLOW_HTTP !== 'true') throw new Error('PVE_URL must use HTTPS unless PVE_ALLOW_HTTP=true');
@@ -35,4 +36,3 @@ export async function discoverProxmox(config: ProxmoxConfig, fetcher: typeof fet
   const clusterName = clusterStatus.find(item => item.type === 'cluster')?.name || 'Proxmox cluster';
   return buildInventory(resources, 'proxmox', clusterName);
 }
-

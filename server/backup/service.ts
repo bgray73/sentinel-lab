@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { access, copyFile, mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { access, copyFile, cp, mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import type { Store } from '../store.js';
 import type { BackupFile, BackupManifest, BackupSummary } from './types.js';
@@ -16,20 +16,23 @@ const fileSources = (env: NodeJS.ProcessEnv) => [
 
 export class BackupService {
   readonly root: string;
+  readonly replicaRoot?: string;
   readonly enabled: boolean;
   readonly intervalHours: number;
   readonly maxBackups: number;
   readonly ready: Promise<void>;
-  private queue: Promise<BackupSummary> = Promise.resolve({ id: '', createdAt: '', reason: 'manual', files: 0, bytes: 0, verified: false });
+  private queue: Promise<BackupSummary> = Promise.resolve({ id: '', createdAt: '', reason: 'manual', files: 0, bytes: 0, verified: false, replicated: null });
   private timer?: NodeJS.Timeout;
   private lastError = '';
 
   constructor(private readonly database: Store, private readonly env: NodeJS.ProcessEnv = process.env, schedule = true) {
     this.root = env.SENTINEL_BACKUP_DIR || resolve('.sentinel/backups');
+    this.replicaRoot = env.SENTINEL_BACKUP_REPLICA_DIR ? resolve(env.SENTINEL_BACKUP_REPLICA_DIR) : undefined;
+    if (this.replicaRoot === resolve(this.root)) throw new Error('Backup replica directory must differ from the primary backup directory');
     this.enabled = env.SENTINEL_BACKUPS_ENABLED === 'true';
     this.intervalHours = integer(env.SENTINEL_BACKUP_INTERVAL_HOURS, 24, 1, 168);
     this.maxBackups = integer(env.SENTINEL_BACKUP_MAX_COUNT, 14, 1, 100);
-    this.ready = mkdir(this.root, { recursive: true }).then(() => undefined);
+    this.ready = Promise.all([mkdir(this.root, { recursive: true }), ...(this.replicaRoot ? [mkdir(this.replicaRoot, { recursive: true })] : [])]).then(() => undefined);
     if (schedule && this.enabled) {
       this.timer = setInterval(() => { void this.create('scheduled').catch(error => { this.lastError = error instanceof Error ? error.message : 'Scheduled backup failed'; }); }, this.intervalHours * 3_600_000);
       this.timer.unref();
@@ -46,7 +49,7 @@ export class BackupService {
     await this.ready;
     const entries = await readdir(this.root, { withFileTypes: true });
     const backups = (await Promise.all(entries.filter(entry => entry.isDirectory() && backupIdPattern.test(entry.name)).map(entry => this.describe(entry.name)))).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-    return { enabled: this.enabled, intervalHours: this.intervalHours, maxBackups: this.maxBackups, lastError: this.lastError, backups, summary: { count: backups.length, verified: backups.filter(item => item.verified).length, latestAt: backups[0]?.createdAt || null } };
+    return { enabled: this.enabled, intervalHours: this.intervalHours, maxBackups: this.maxBackups, replicaConfigured: Boolean(this.replicaRoot), replicaDirectory: this.replicaRoot || null, lastError: this.lastError, backups, summary: { count: backups.length, verified: backups.filter(item => item.verified).length, replicated: backups.filter(item => item.replicated).length, latestAt: backups[0]?.createdAt || null } };
   }
 
   async verify(id: string) {
@@ -54,10 +57,19 @@ export class BackupService {
     return verifyBackupDirectory(this.root, id);
   }
 
+  async replicate(id: string) {
+    assertBackupId(id);
+    if (!this.replicaRoot) throw new Error('Backup replication is not configured');
+    const primary = await verifyBackupDirectory(this.root, id);
+    if (!primary.verified) throw new Error(primary.error || 'Primary backup verification failed');
+    await this.replicateInternal(id);
+    return this.describe(id);
+  }
+
   async prometheus() {
     const value = await this.list();
     const latest = value.summary.latestAt ? Math.max(0, (Date.now() - new Date(value.summary.latestAt).getTime()) / 1000) : -1;
-    return `# HELP sentinel_backups_total Retained Sentinel backups\n# TYPE sentinel_backups_total gauge\nsentinel_backups_total ${value.summary.count}\n# HELP sentinel_backups_verified Verified retained Sentinel backups\n# TYPE sentinel_backups_verified gauge\nsentinel_backups_verified ${value.summary.verified}\n# HELP sentinel_backup_latest_age_seconds Age of latest backup or -1 when none exists\n# TYPE sentinel_backup_latest_age_seconds gauge\nsentinel_backup_latest_age_seconds ${latest}\n`;
+    return `# HELP sentinel_backups_total Retained Sentinel backups\n# TYPE sentinel_backups_total gauge\nsentinel_backups_total ${value.summary.count}\n# HELP sentinel_backups_verified Verified retained Sentinel backups\n# TYPE sentinel_backups_verified gauge\nsentinel_backups_verified ${value.summary.verified}\n# HELP sentinel_backups_replicated Backups verified on the replica target\n# TYPE sentinel_backups_replicated gauge\nsentinel_backups_replicated ${value.summary.replicated}\n# HELP sentinel_backup_latest_age_seconds Age of latest backup or -1 when none exists\n# TYPE sentinel_backup_latest_age_seconds gauge\nsentinel_backup_latest_age_seconds ${latest}\n`;
   }
 
   close() { if (this.timer) clearInterval(this.timer); }
@@ -81,8 +93,13 @@ export class BackupService {
       await rename(temporary, destination);
       const result = await verifyBackupDirectory(this.root, id);
       if (!result.verified) throw new Error(result.error || 'Backup verification failed');
-      await this.prune(); this.lastError = '';
-      return { id, createdAt, reason, files: files.length, bytes: files.reduce((sum, file) => sum + file.bytes, 0), verified: true } satisfies BackupSummary;
+      let replicated: boolean | null = null; let replicaError: string | undefined;
+      if (this.replicaRoot) {
+        try { await this.replicateInternal(id); replicated = true; }
+        catch (error) { replicated = false; replicaError = error instanceof Error ? error.message : 'Backup replication failed'; }
+      }
+      await this.prune(); this.lastError = replicaError || '';
+      return { id, createdAt, reason, files: files.length, bytes: files.reduce((sum, file) => sum + file.bytes, 0), verified: true, replicated, replicaError } satisfies BackupSummary;
     } catch (error) {
       await Promise.all([
         rm(temporary, { recursive: true, force: true }),
@@ -95,8 +112,9 @@ export class BackupService {
   private async describe(id: string): Promise<BackupSummary> {
     try {
       const verified = await verifyBackupDirectory(this.root, id); const manifest = await readManifest(this.root, id);
-      return { id, createdAt: manifest.createdAt, reason: manifest.reason, files: manifest.files.length, bytes: manifest.files.reduce((sum, file) => sum + file.bytes, 0), verified: verified.verified, error: verified.error };
-    } catch (error) { return { id, createdAt: '', reason: 'manual', files: 0, bytes: 0, verified: false, error: error instanceof Error ? error.message : 'Unreadable backup' }; }
+      const replica = this.replicaRoot ? await verifyBackupDirectory(this.replicaRoot, id) : null;
+      return { id, createdAt: manifest.createdAt, reason: manifest.reason, files: manifest.files.length, bytes: manifest.files.reduce((sum, file) => sum + file.bytes, 0), verified: verified.verified, error: verified.error, replicated: replica?.verified ?? null, replicaError: replica && !replica.verified ? replica.error : undefined };
+    } catch (error) { return { id, createdAt: '', reason: 'manual', files: 0, bytes: 0, verified: false, replicated: null, error: error instanceof Error ? error.message : 'Unreadable backup' }; }
   }
 
   private async prune() {
@@ -104,7 +122,23 @@ export class BackupService {
     for (const backup of value.backups.slice(this.maxBackups)) {
       assertBackupId(backup.id);
       await rm(resolve(this.root, backup.id), { recursive: true, force: true });
+      if (this.replicaRoot) await rm(resolve(this.replicaRoot, backup.id), { recursive: true, force: true });
     }
+  }
+
+  private async replicateInternal(id: string) {
+    if (!this.replicaRoot) return;
+    const stagingRoot = resolve(this.replicaRoot, '.staging'); const temporary = resolve(stagingRoot, id); const destination = resolve(this.replicaRoot, id); const previous = resolve(this.replicaRoot, `.${id}.previous`);
+    await mkdir(stagingRoot, { recursive: true }); await rm(temporary, { recursive: true, force: true }); await rm(previous, { recursive: true, force: true });
+    try {
+      await cp(resolve(this.root, id), temporary, { recursive: true, force: false });
+      const result = await verifyBackupDirectory(stagingRoot, id);
+      if (!result.verified) throw new Error(result.error || 'Replica verification failed');
+      if (await exists(destination)) await rename(destination, previous);
+      try { await rename(temporary, destination); }
+      catch (error) { if (await exists(previous)) await rename(previous, destination); throw error; }
+      await rm(previous, { recursive: true, force: true });
+    } catch (error) { await rm(temporary, { recursive: true, force: true }); throw error; }
   }
 }
 

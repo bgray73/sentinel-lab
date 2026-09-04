@@ -1,4 +1,6 @@
 services:
   sentinel:
+    environment:
+      SENTINEL_BACKUP_REPLICA_DIR: /var/lib/sentinel-replica
     volumes:
-      - /mnt/backup/sentinel:/var/lib/sentinel/backups
+      - /mnt/backup/sentinel:/var/lib/sentinel-replica

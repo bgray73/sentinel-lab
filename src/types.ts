@@ -86,8 +86,11 @@ export type Monitor = {
 export type MonitorsResponse = { mode: 'simulation' | 'live'; monitors: Monitor[] };
 export type AlertSeverity = 'warning' | 'critical';
 export type AlertRule = { id: string; name: string; monitorId: string; failureThreshold: number; cooldownSeconds: number; severity: AlertSeverity; enabled: boolean; suppressedUntil?: string; createdAt: string };
-export type Incident = { id: string; ruleId: string; monitorId: string; title: string; summary: string; severity: AlertSeverity; status: 'open' | 'acknowledged' | 'resolved'; occurrences: number; openedAt: string; updatedAt: string; acknowledgedAt?: string; resolvedAt?: string; lastNotificationAt?: string };
-export type AlertsResponse = { rules: AlertRule[]; notifications: { mode: 'simulation' | 'live'; webhookConfigured: boolean; emailConfigured: boolean } };
+export type Incident = { id: string; ruleId: string; monitorId: string; title: string; summary: string; severity: AlertSeverity; status: 'open' | 'acknowledged' | 'resolved'; occurrences: number; openedAt: string; updatedAt: string; acknowledgedAt?: string; resolvedAt?: string; lastNotificationAt?: string; externalTicket?:{provider:'servicenow';id:string;number:string;url?:string;updatedAt:string} };
+export type NotificationStatus={mode:'simulation'|'live';webhookConfigured:boolean;slackConfigured:boolean;teamsConfigured:boolean;emailConfigured:boolean;serviceNowConfigured:boolean};
+export type AlertsResponse = { rules: AlertRule[]; notifications: NotificationStatus };
+export type NotificationDelivery={id:string;incidentId:string;channel:'webhook'|'slack'|'teams'|'email'|'servicenow'|'simulation';event:'opened'|'reminder'|'resolved';status:'sent'|'failed'|'simulated';detail:string;attempt:number;retryOf?:string;attemptedAt:string};
+export type AutomationSnapshot={status:NotificationStatus;deliveries:NotificationDelivery[];summary:{sent:number;failed:number;simulated:number;tickets:number}};
 export type TopologyNodeType = 'node' | 'vm' | 'lxc' | 'docker-host' | 'application' | 'container' | 'service';
 export type TopologyNode = { id:string; type:TopologyNodeType; name:string; state:string; health:HealthStatus; source:'proxmox'|'docker'|'monitoring'; detail?:string };
 export type TopologyEdge = { from:string; to:string; relation:'contains'|'hosts'|'runs'|'monitors'; inferred:boolean };
@@ -124,8 +127,8 @@ export interface Session { mode: 'disabled' | 'proxy'; user: { subject: string; 
 export type SecurityEventType = 'session_authenticated' | 'authentication_failed' | 'authorization_denied';
 export interface SecurityEvent { id:string;timestamp:string;type:SecurityEventType;severity:'info'|'warning';subject?:string;role?:SentinelRole;method:string;path:string;sourceIp?:string;reason?:string;requiredRole?:SentinelRole }
 export interface SecuritySnapshot { events:SecurityEvent[];summary:{retained:number;failures:number;denied:number;sessions:number};retention:{days:number;maxEvents:number} }
-export interface BackupSummary { id:string;createdAt:string;reason:'manual'|'scheduled';files:number;bytes:number;verified:boolean;error?:string }
-export interface BackupSnapshot { enabled:boolean;intervalHours:number;maxBackups:number;lastError:string;backups:BackupSummary[];summary:{count:number;verified:number;latestAt:string|null} }
+export interface BackupSummary { id:string;createdAt:string;reason:'manual'|'scheduled';files:number;bytes:number;verified:boolean;replicated:boolean|null;replicaError?:string;error?:string }
+export interface BackupSnapshot { enabled:boolean;intervalHours:number;maxBackups:number;replicaConfigured:boolean;replicaDirectory:string|null;lastError:string;backups:BackupSummary[];summary:{count:number;verified:number;replicated:number;latestAt:string|null} }
 export type CollectorKind='proxmox'|'docker'|'hybrid';
 export type CollectorView={id:string;name:string;site:string;kind:CollectorKind;intervalSeconds:number;createdAt:string;lastSeenAt?:string;lastSequence?:number;status:'online'|'stale'|'never';ageSeconds:number|null;version:string|null;summary:{proxmoxResources:number;dockerContainers:number;warnings:number;errors:number}};
 export type SiteView={name:string;collectors:number;online:number;stale:number;nodes:number;virtualMachines:number;lxcContainers:number;dockerContainers:number;warnings:number};

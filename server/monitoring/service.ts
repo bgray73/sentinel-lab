@@ -44,6 +44,19 @@ export class MonitoringService {
   incidents(status?: string) { return this.data.incidents.filter(incident => !status || incident.status === status); }
   deliveries(limit = 100) { return this.data.deliveries.slice(0, Math.min(Math.max(limit, 1), 500)); }
   notificationStatus() { return this.notifications.status(); }
+  automation() {
+    const deliveries = this.deliveries(100);
+    return { status: this.notifications.status(), deliveries, summary: { sent: deliveries.filter(item => item.status === 'sent').length, failed: deliveries.filter(item => item.status === 'failed').length, simulated: deliveries.filter(item => item.status === 'simulated').length, tickets: this.data.incidents.filter(item => item.externalTicket).length } };
+  }
+  async retryDelivery(id: string) {
+    const original = this.data.deliveries.find(item => item.id === id);
+    if (!original || original.status !== 'failed') throw new Error('Failed delivery not found');
+    if (original.channel === 'simulation') throw new Error('Simulated deliveries cannot be retried');
+    const incident = this.data.incidents.find(item => item.id === original.incidentId);
+    if (!incident) throw new Error('Incident for delivery not found');
+    const [retry] = await this.notifications.send(incident, original.event, original.channel, (original.attempt || 1) + 1, original.id);
+    this.data.deliveries.unshift(retry); this.data.deliveries = this.data.deliveries.slice(0, 1_000); await this.store.save(this.data); return retry;
+  }
   retention() { return this.data.retentionPolicy; }
   metrics(rangeValue:string='24h') { if(!isMetricRange(rangeValue))throw new Error('Range must be 1h, 6h, 24h, 7d, or 30d');return buildMetrics(this.list(),this.data.results,this.data.incidents,this.data.alertRules,this.data.retentionPolicy,rangeValue as MetricRange); }
   prometheus() { return prometheusMetrics(this.list(),this.data.results,this.data.incidents,this.data.alertRules,this.mode()); }
