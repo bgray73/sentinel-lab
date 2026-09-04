@@ -1,0 +1,11 @@
+{
+  auto_https off
+  admin off
+}
+
+:8080 {
+  reverse_proxy sentinel:4100 {
+    header_up -X-Sentinel-Proxy-Secret
+    header_up X-Sentinel-Proxy-Secret {$SENTINEL_AUTH_PROXY_SECRET}
+  }
+}

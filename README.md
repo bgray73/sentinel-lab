@@ -334,3 +334,30 @@ The proxy must remove any incoming `X-Forwarded-User`, `X-Forwarded-Name`, `X-Fo
 Users in `SENTINEL_AUTH_ADMIN_GROUPS` become administrators, users in `SENTINEL_AUTH_OPERATOR_GROUPS` become operators, and every other authenticated user is a viewer. The UI displays the resolved identity and role; the API independently enforces the same permissions. `GET /api/session` returns the current session without exposing proxy secrets.
 
 `GET /api/health` remains unauthenticated for container health checks. In proxy mode, Prometheus can call `GET /metrics` with `Authorization: Bearer <SENTINEL_METRICS_TOKEN>`. The LabOps snapshot continues to use its separate `LABOPS_EXPORT_TOKEN`. Use different random values for all three tokens.
+
+## Stage 14: OIDC gateway and security audit
+
+The optional `docker-compose.oidc.yml` profile turns the Stage 13 trust contract into a deployable gateway. OAuth2 Proxy v7.15.4 performs standards-based OIDC login, then an internal Caddy 2.11.4 bridge injects the private Sentinel proxy secret. Only the gateway publishes a port; Sentinel and the bridge remain on an internal Docker network.
+
+Register this callback with LabOps OIDC, Entra ID, Keycloak, Authentik, Okta, or another OIDC provider:
+
+```text
+https://sentinel.example.net/oauth2/callback
+```
+
+Then copy the example environment file and set the OIDC values. Generate separate secrets rather than reusing credentials:
+
+```bash
+cd deploy/sentinel
+cp .env.example .env
+openssl rand -hex 32       # SENTINEL_AUTH_PROXY_SECRET
+openssl rand -base64 32    # SENTINEL_OIDC_COOKIE_SECRET
+openssl rand -hex 32       # SENTINEL_METRICS_TOKEN
+docker compose -f docker-compose.oidc.yml up -d
+```
+
+The gateway uses secure cookies, so terminate trusted HTTPS in front of its loopback-bound port and make the public URL match `SENTINEL_OIDC_REDIRECT_URL`. Do not change `SENTINEL_BIND_ADDRESS` to a public interface unless host firewall rules restrict the port to that TLS proxy. If the GHCR package is private, run `docker login ghcr.io` before starting the stack.
+
+Administrators now have a **Security** page that reports authenticated sessions, failed authentication, authorization denials, source addresses, requested paths, and required roles. Events persist with owner-only permissions at `/var/lib/sentinel/security-audit.json`. Defaults retain 90 days and at most 10,000 events; configure `SENTINEL_AUTH_AUDIT_RETENTION_DAYS` and `SENTINEL_AUTH_AUDIT_MAX_EVENTS` to change those limits.
+
+`GET /api/security/events` is administrator-only and accepts `limit` plus a `type` filter of `session_authenticated`, `authentication_failed`, or `authorization_denied`. Prometheus also exports retained security-event, authentication-failure, and authorization-denial gauges.
