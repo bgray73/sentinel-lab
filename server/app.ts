@@ -21,6 +21,16 @@ import type { Run, TestResult } from './types.js';
 export function createApp(store: Store, monitoring?: MonitoringService, telemetry?: TelemetryService, cmdb?: CmdbService, logs?: LokiService, hardware?: HardwareService, log: StructuredLogger = defaultLogger) {
   const app = express();
   app.disable('x-powered-by');
+  app.use((req, res, next) => {
+    res.setHeader('Content-Security-Policy', "default-src 'self'; base-uri 'self'; connect-src 'self'; font-src 'self' https://fonts.gstatic.com; form-action 'self'; frame-ancestors 'none'; img-src 'self' data:; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com");
+    res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+    res.setHeader('Permissions-Policy', 'camera=(), geolocation=(), microphone=()');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    if (req.path === '/metrics' || req.path.startsWith('/api/')) res.setHeader('Cache-Control', 'no-store');
+    next();
+  });
   app.use(express.json({ limit: '32kb' }));
   app.use(requestLogger(log));
 
