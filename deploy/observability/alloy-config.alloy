@@ -1,0 +1,100 @@
+logging {
+  level  = "info"
+  format = "json"
+}
+
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+}
+
+discovery.relabel "docker_logs" {
+  targets = []
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "service_name"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+    target_label  = "compose_project"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "compose_service"
+  }
+}
+
+loki.source.docker "containers" {
+  host          = "unix:///var/run/docker.sock"
+  targets       = discovery.docker.containers.targets
+  labels        = { source = "docker", environment = "homelab" }
+  relabel_rules = discovery.relabel.docker_logs.rules
+  forward_to    = [loki.process.docker.receiver]
+}
+
+loki.process "docker" {
+  stage.json {
+    expressions = {
+      level        = "level",
+      ci_id        = "ci_id",
+      service_name = "service",
+    }
+  }
+
+  stage.labels {
+    values = {
+      level        = "",
+      ci_id        = "",
+      service_name = "",
+    }
+  }
+
+  forward_to = [loki.write.local.receiver]
+}
+
+loki.relabel "journal" {
+  forward_to = []
+
+  rule {
+    source_labels = ["__journal__systemd_unit"]
+    target_label  = "unit"
+  }
+
+  rule {
+    source_labels = ["__journal__hostname"]
+    target_label  = "host"
+  }
+}
+
+loki.source.journal "host" {
+  labels        = { source = "journal", environment = "homelab" }
+  relabel_rules = loki.relabel.journal.rules
+  forward_to    = [loki.write.local.receiver]
+}
+
+loki.source.syslog "network_tcp" {
+  listener {
+    address  = "0.0.0.0:5514"
+    protocol = "tcp"
+    labels   = { source = "syslog", transport = "tcp", environment = "homelab" }
+  }
+  forward_to = [loki.write.local.receiver]
+}
+
+loki.source.syslog "network_udp" {
+  listener {
+    address  = "0.0.0.0:5514"
+    protocol = "udp"
+    labels   = { source = "syslog", transport = "udp", environment = "homelab" }
+  }
+  forward_to = [loki.write.local.receiver]
+}
+
+loki.write "local" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}

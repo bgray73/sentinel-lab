@@ -11,13 +11,16 @@ import { simulatedDockerInventory } from './docker/inventory.js';
 import { buildTopology } from './topology/engine.js';
 import type {TelemetryService} from './telemetry/service.js';
 import type { CmdbService } from './cmdb/service.js';
+import { logger as defaultLogger, requestLogger, type StructuredLogger } from './logging/logger.js';
+import type { LokiService } from './logging/service.js';
 import type { MonitoringService } from './monitoring/service.js';
 import type { Run, TestResult } from './types.js';
 
-export function createApp(store: Store, monitoring?: MonitoringService, telemetry?: TelemetryService, cmdb?: CmdbService) {
+export function createApp(store: Store, monitoring?: MonitoringService, telemetry?: TelemetryService, cmdb?: CmdbService, logs?: LokiService, log: StructuredLogger = defaultLogger) {
   const app = express();
   app.disable('x-powered-by');
   app.use(express.json({ limit: '32kb' }));
+  app.use(requestLogger(log));
 
   app.get('/api/health', (_req, res) => res.json({ status: 'ok', service: 'sentinel-api' }));
   app.get('/api/monitors', async (_req, res) => {
@@ -87,6 +90,22 @@ export function createApp(store: Store, monitoring?: MonitoringService, telemetr
     if (!cmdb) return res.status(503).json({ error: 'CMDB service is not available' });
     try { await cmdb.ready; return res.json(await cmdb.reconcile()); }
     catch (error) { return res.status(502).json({ error: error instanceof Error ? error.message : 'CMDB reconciliation failed' }); }
+  });
+  app.get('/api/logs/status', (_req, res) => {
+    if (!logs) return res.status(503).json({ error: 'Logging service is not available' });
+    return res.json(logs.status());
+  });
+  app.get('/api/logs', async (req, res) => {
+    if (!logs) return res.status(503).json({ error: 'Logging service is not available' });
+    try { return res.json(await logs.search({ range: typeof req.query.range === 'string' ? req.query.range : undefined, limit: Number(req.query.limit || 200), level: typeof req.query.level === 'string' ? req.query.level : undefined, source: typeof req.query.source === 'string' ? req.query.source : undefined, service: typeof req.query.service === 'string' ? req.query.service : undefined, search: typeof req.query.search === 'string' ? req.query.search : undefined, ciIds: typeof req.query.ciId === 'string' ? [req.query.ciId] : undefined })); }
+    catch (error) { return res.status(400).json({ error: error instanceof Error ? error.message : 'Invalid log query' }); }
+  });
+  app.get('/api/logs/incidents/:id/correlation', async (req, res) => {
+    if (!logs || !monitoring) return res.status(503).json({ error: 'Logging and monitoring services are required' });
+    await monitoring.ready; const incident = monitoring.incidents().find(item => item.id === req.params.id); if (!incident) return res.status(404).json({ error: 'Incident not found' });
+    const dependencies = monitoring.dependencies().filter(item => item.monitorId === incident.monitorId).map(item => item.resourceId);
+    try { const result = await logs.correlate([`service/${incident.monitorId}`,...dependencies], '6h'); return res.json({ incident, relatedConfigurationItems: [`service/${incident.monitorId}`,...dependencies], ...result }); }
+    catch (error) { return res.status(502).json({ error: error instanceof Error ? error.message : 'Log correlation failed' }); }
   });
   app.post('/api/monitors', async (req, res) => {
     if (!monitoring) return res.status(503).json({ error: 'Monitoring service is not available' });
@@ -209,7 +228,7 @@ export function createApp(store: Store, monitoring?: MonitoringService, telemetr
   }
   app.use((error: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     if (error instanceof ValidationError) return res.status(400).json({ error: error.message });
-    console.error(error);
+    log.error('unhandled_request_error', { error: error.message });
     return res.status(500).json({ error: 'Internal server error' });
   });
   return app;
