@@ -9,10 +9,12 @@ import { simulatedInventory } from './proxmox/inventory.js';
 import { discoverDocker, dockerConfigFromEnvironment } from './docker/client.js';
 import { simulatedDockerInventory } from './docker/inventory.js';
 import { buildTopology } from './topology/engine.js';
+import type {TelemetryService} from './telemetry/service.js';
+import type { CmdbService } from './cmdb/service.js';
 import type { MonitoringService } from './monitoring/service.js';
 import type { Run, TestResult } from './types.js';
 
-export function createApp(store: Store, monitoring?: MonitoringService) {
+export function createApp(store: Store, monitoring?: MonitoringService, telemetry?: TelemetryService, cmdb?: CmdbService) {
   const app = express();
   app.disable('x-powered-by');
   app.use(express.json({ limit: '32kb' }));
@@ -36,7 +38,55 @@ export function createApp(store: Store, monitoring?: MonitoringService) {
   });
   app.get('/metrics',async(_req,res)=>{
     if(!monitoring)return res.status(503).type('text/plain').send('Monitoring service is not available\n');
-    await monitoring.ready;res.set('Content-Type','text/plain; version=0.0.4; charset=utf-8');return res.send(monitoring.prometheus());
+    await monitoring.ready;if(telemetry)await telemetry.ready;res.set('Content-Type','text/plain; version=0.0.4; charset=utf-8');return res.send(`${monitoring.prometheus()}${telemetry?.prometheus()||''}`);
+  });
+  app.get('/api/infrastructure/metrics/status',async(_req,res)=>{if(!telemetry)return res.status(503).json({error:'Telemetry service is not available'});await telemetry.ready;return res.json(telemetry.status())});
+  app.get('/api/infrastructure/metrics',async(req,res)=>{if(!telemetry)return res.status(503).json({error:'Telemetry service is not available'});try{await telemetry.ready;return res.json(telemetry.metrics(typeof req.query.range==='string'?req.query.range:'24h'))}catch(error){return res.status(400).json({error:error instanceof Error?error.message:'Invalid telemetry range'})}});
+  app.post('/api/infrastructure/metrics/collect',async(_req,res)=>{if(!telemetry)return res.status(503).json({error:'Telemetry service is not available'});try{await telemetry.ready;return res.json(await telemetry.collect())}catch(error){return res.status(502).json({error:error instanceof Error?error.message:'Telemetry collection failed'})}});
+  app.get('/api/cmdb/status', async (_req, res) => {
+    if (!cmdb) return res.status(503).json({ error: 'CMDB service is not available' });
+    await cmdb.ready; return res.json(cmdb.status());
+  });
+  app.get('/api/cmdb/items', async (req, res) => {
+    if (!cmdb) return res.status(503).json({ error: 'CMDB service is not available' });
+    await cmdb.ready; return res.json(cmdb.list({ class: typeof req.query.class === 'string' ? req.query.class : undefined, lifecycle: typeof req.query.lifecycle === 'string' ? req.query.lifecycle : undefined, search: typeof req.query.search === 'string' ? req.query.search : undefined }));
+  });
+  app.get('/api/cmdb/items/:id', async (req, res) => {
+    if (!cmdb) return res.status(503).json({ error: 'CMDB service is not available' });
+    await cmdb.ready; const item = cmdb.get(req.params.id); if (!item) return res.status(404).json({ error: 'Configuration item not found' });
+    return res.json({ item, relationships: cmdb.relationships().filter(relation => relation.fromId === item.id || relation.toId === item.id), changes: cmdb.changes(100, item.id) });
+  });
+  app.post('/api/cmdb/items', async (req, res) => {
+    if (!cmdb) return res.status(503).json({ error: 'CMDB service is not available' });
+    try { await cmdb.ready; return res.status(201).json(await cmdb.createItem(req.body || {})); }
+    catch (error) { return res.status(400).json({ error: error instanceof Error ? error.message : 'Invalid configuration item' }); }
+  });
+  app.patch('/api/cmdb/items/:id', async (req, res) => {
+    if (!cmdb) return res.status(503).json({ error: 'CMDB service is not available' });
+    try { await cmdb.ready; return res.json(await cmdb.updateItem(req.params.id, req.body || {})); }
+    catch (error) { return res.status(error instanceof Error && error.message.includes('not found') ? 404 : 400).json({ error: error instanceof Error ? error.message : 'Invalid configuration item update' }); }
+  });
+  app.get('/api/cmdb/relationships', async (_req, res) => {
+    if (!cmdb) return res.status(503).json({ error: 'CMDB service is not available' });
+    await cmdb.ready; return res.json(cmdb.relationships());
+  });
+  app.post('/api/cmdb/relationships', async (req, res) => {
+    if (!cmdb) return res.status(503).json({ error: 'CMDB service is not available' });
+    try { await cmdb.ready; return res.status(201).json(await cmdb.addRelationship(req.body || {})); }
+    catch (error) { return res.status(400).json({ error: error instanceof Error ? error.message : 'Invalid CMDB relationship' }); }
+  });
+  app.get('/api/cmdb/changes', async (req, res) => {
+    if (!cmdb) return res.status(503).json({ error: 'CMDB service is not available' });
+    await cmdb.ready; return res.json(cmdb.changes(Number(req.query.limit || 100), typeof req.query.ciId === 'string' ? req.query.ciId : undefined));
+  });
+  app.get('/api/cmdb/snapshot', async (_req, res) => {
+    if (!cmdb) return res.status(503).json({ error: 'CMDB service is not available' });
+    await cmdb.ready; return res.json({ status: cmdb.status(), items: cmdb.list(), relationships: cmdb.relationships(), changes: cmdb.changes(500) });
+  });
+  app.post('/api/cmdb/reconcile', async (_req, res) => {
+    if (!cmdb) return res.status(503).json({ error: 'CMDB service is not available' });
+    try { await cmdb.ready; return res.json(await cmdb.reconcile()); }
+    catch (error) { return res.status(502).json({ error: error instanceof Error ? error.message : 'CMDB reconciliation failed' }); }
   });
   app.post('/api/monitors', async (req, res) => {
     if (!monitoring) return res.status(503).json({ error: 'Monitoring service is not available' });

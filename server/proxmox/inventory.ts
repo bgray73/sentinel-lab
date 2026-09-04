@@ -35,7 +35,9 @@ function normalizeResource(resource: ProxmoxApiResource): ProxmoxResource | null
     memoryUsedBytes: resource.mem,
     memoryTotalBytes: resource.maxmem,
     diskUsedBytes: resource.disk,
-    diskTotalBytes: resource.maxdisk
+    diskTotalBytes: resource.maxdisk,
+    networkRxBytes: resource.netin,
+    networkTxBytes: resource.netout
   };
 }
 
@@ -65,11 +67,10 @@ export function simulatedInventory() {
     { id: 'node/pve-01', type: 'node', name: 'pve-01', status: 'online', cpu: 0.34, mem: 41_876_701_184, maxmem: 68_719_476_736, uptime: 1_432_110 },
     { id: 'node/pve-02', type: 'node', name: 'pve-02', status: 'online', cpu: 0.47, mem: 57_037_165_568, maxmem: 68_719_476_736, uptime: 982_440 },
     { id: 'node/pve-03', type: 'node', name: 'pve-03', status: 'online', cpu: 0.21, mem: 32_985_348_096, maxmem: 68_719_476_736, uptime: 2_118_003 },
-    { id: 'qemu/104', type: 'qemu', vmid: 104, name: 'docker-01', node: 'pve-02', status: 'running', cpu: 0.41, mem: 6_979_321_856, maxmem: 8_589_934_592, uptime: 381_200 },
-    { id: 'qemu/108', type: 'qemu', vmid: 108, name: 'monitoring', node: 'pve-01', status: 'running', cpu: 0.18, mem: 4_294_967_296, maxmem: 8_589_934_592, uptime: 741_320 },
-    { id: 'lxc/201', type: 'lxc', vmid: 201, name: 'home-assistant', node: 'pve-03', status: 'running', cpu: 0.09, mem: 1_610_612_736, maxmem: 4_294_967_296, uptime: 1_201_100 },
+    { id: 'qemu/104', type: 'qemu', vmid: 104, name: 'docker-01', node: 'pve-02', status: 'running', cpu: 0.41, mem: 6_979_321_856, maxmem: 8_589_934_592, uptime: 381_200, netin: 8_200_000_000, netout: 3_100_000_000 },
+    { id: 'qemu/108', type: 'qemu', vmid: 108, name: 'monitoring', node: 'pve-01', status: 'running', cpu: 0.18, mem: 4_294_967_296, maxmem: 8_589_934_592, uptime: 741_320, netin: 4_500_000_000, netout: 2_700_000_000 },
+    { id: 'lxc/201', type: 'lxc', vmid: 201, name: 'home-assistant', node: 'pve-03', status: 'running', cpu: 0.09, mem: 1_610_612_736, maxmem: 4_294_967_296, uptime: 1_201_100, netin: 1_900_000_000, netout: 980_000_000 },
     { id: 'lxc/202', type: 'lxc', vmid: 202, name: 'lab-dns', node: 'pve-01', status: 'stopped' },
     { id: 'storage/local-zfs', type: 'storage', name: 'local-zfs', node: 'pve-02', status: 'available', disk: 8_900_000_000_000, maxdisk: 10_000_000_000_000 }
   ], 'simulation', 'Sentinel homelab');
 }
-

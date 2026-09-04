@@ -1,6 +1,6 @@
 import type { AlertRule, Incident, MetricRange, MetricsSnapshot, MonitorMetricSeries, MonitorResult, MonitorView, RetentionPolicy } from '../monitoring/types.js';
 
-const rangeConfig: Record<MetricRange,{milliseconds:number;bucketSeconds:number}> = {
+export const rangeConfig: Record<MetricRange,{milliseconds:number;bucketSeconds:number}> = {
   '1h': { milliseconds:3_600_000,bucketSeconds:300 }, '6h': { milliseconds:21_600_000,bucketSeconds:1_800 }, '24h': { milliseconds:86_400_000,bucketSeconds:3_600 }, '7d': { milliseconds:604_800_000,bucketSeconds:21_600 }, '30d': { milliseconds:2_592_000_000,bucketSeconds:86_400 }
 };
 
