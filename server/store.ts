@@ -56,6 +56,8 @@ export class Store {
     }));
   }
 
+  backup(destination: string) { this.db.prepare('VACUUM INTO ?').run(destination); }
+
   close() { this.db.close(); }
 }
 

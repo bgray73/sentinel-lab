@@ -56,6 +56,14 @@ describe('authentication and authorization', () => {
     expect((await response.json()).summary.denied).toBe(1);
   });
 
+  it('restricts backup controls to administrators', async () => {
+    const base = await start(config);
+    const viewer = proxyHeaders('viewer', 'everyone');
+    expect((await fetch(`${base}/api/backups`, { headers: viewer })).status).toBe(403);
+    const admin = proxyHeaders('admin', 'admins');
+    expect((await fetch(`${base}/api/backups`, { headers: admin })).status).toBe(503);
+  });
+
   async function start(auth: AuthConfig) {
     store = new Store(':memory:');
     server = createApp(store, undefined, undefined, undefined, undefined, undefined, new StructuredLogger(() => {}), auth, new SecurityAuditService({}, false)).listen(0, '127.0.0.1');

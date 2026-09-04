@@ -102,7 +102,7 @@ export function session(config: AuthConfig, identity: Identity) {
 }
 
 function requiredRole(req: Request): Role {
-  if (req.path.startsWith('/api/security/')) return 'admin';
+  if (req.path.startsWith('/api/security/') || req.path.startsWith('/api/backups')) return 'admin';
   if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return 'viewer';
   const operatorRoutes = [
     /^\/api\/runs$/,

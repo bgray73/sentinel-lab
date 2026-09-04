@@ -24,7 +24,9 @@ ENV NODE_ENV=production \
     SENTINEL_TELEMETRY_FILE=/var/lib/sentinel/telemetry.json \
     SENTINEL_CMDB_FILE=/var/lib/sentinel/cmdb.json \
     SENTINEL_HARDWARE_OPERATIONS_FILE=/var/lib/sentinel/hardware-operations.json \
-    SENTINEL_AUTH_AUDIT_FILE=/var/lib/sentinel/security-audit.json
+    SENTINEL_AUTH_AUDIT_FILE=/var/lib/sentinel/security-audit.json \
+    SENTINEL_BACKUP_DIR=/var/lib/sentinel/backups \
+    SENTINEL_RESTORE_POINT_DIR=/var/lib/sentinel/restore-points
 WORKDIR /app
 COPY --from=production-dependencies --chown=node:node /app/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/package.json ./package.json

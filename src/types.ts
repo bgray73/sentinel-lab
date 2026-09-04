@@ -124,3 +124,5 @@ export interface Session { mode: 'disabled' | 'proxy'; user: { subject: string; 
 export type SecurityEventType = 'session_authenticated' | 'authentication_failed' | 'authorization_denied';
 export interface SecurityEvent { id:string;timestamp:string;type:SecurityEventType;severity:'info'|'warning';subject?:string;role?:SentinelRole;method:string;path:string;sourceIp?:string;reason?:string;requiredRole?:SentinelRole }
 export interface SecuritySnapshot { events:SecurityEvent[];summary:{retained:number;failures:number;denied:number;sessions:number};retention:{days:number;maxEvents:number} }
+export interface BackupSummary { id:string;createdAt:string;reason:'manual'|'scheduled';files:number;bytes:number;verified:boolean;error?:string }
+export interface BackupSnapshot { enabled:boolean;intervalHours:number;maxBackups:number;lastError:string;backups:BackupSummary[];summary:{count:number;verified:number;latestAt:string|null} }

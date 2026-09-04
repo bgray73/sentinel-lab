@@ -1,0 +1,4 @@
+services:
+  sentinel:
+    volumes:
+      - /mnt/backup/sentinel:/var/lib/sentinel/backups
