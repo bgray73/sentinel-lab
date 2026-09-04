@@ -203,6 +203,34 @@ pnpm start
 
 Prefer HTTPS whenever Loki crosses a host or trust boundary. Plain HTTP requires the explicit `LOKI_ALLOW_HTTP=true` acknowledgement.
 
+## Stage 10: physical infrastructure
+
+Sentinel now discovers out-of-band server health with Redfish and network or power equipment through Prometheus SNMP Exporter. The normalized inventory covers chassis state, temperatures, fans, power supplies, storage controllers and drives, interfaces and errors, UPS battery runtime, and power load. Discovered devices become CMDB configuration items; a Redfish server whose reported host name matches a Proxmox node is linked as its physical host.
+
+Simulation remains the default. To enable live, read-only discovery:
+
+```bash
+export SENTINEL_REAL_HARDWARE=true
+export SENTINEL_HARDWARE_DISCOVERY_INTERVAL_SECONDS=300
+export SENTINEL_HARDWARE_TIMEOUT_MS=8000
+export SENTINEL_REDFISH_TARGETS='[{"id":"pve-01","name":"pve-01","url":"https://idrac-pve-01.example.net","username":"sentinel","password":"use-a-secret-manager"}]'
+export SNMP_EXPORTER_URL=http://127.0.0.1:9116
+export SNMP_EXPORTER_ALLOW_HTTP=true
+export SENTINEL_SNMP_TARGETS='[{"id":"core-01","name":"Core switch","target":"10.20.0.2","category":"switch","module":"if_mib","auth":"sentinel_v3"},{"id":"ups-01","name":"Rack UPS","target":"10.20.0.20","category":"ups","module":"ups_mib","auth":"sentinel_v3"}]'
+```
+
+Use a dedicated read-only Redfish account and trusted HTTPS certificates. `REDFISH_ALLOW_HTTP=true` exists only for isolated legacy management networks. Redfish passwords are never returned by the API.
+
+Run the bundled SNMP exporter profile from `deploy/observability`:
+
+```bash
+cp .env.example .env
+# Set unique SNMP_USERNAME, SNMP_AUTH_PASSWORD, and SNMP_PRIV_PASSWORD values.
+docker compose --profile hardware up -d
+```
+
+The example uses SNMPv3 `authPriv`; Sentinel sends only a target, module, and auth-profile name to the exporter, so device credentials stay centralized in the exporter. Its port binds to loopback by default. The new endpoints are `GET /api/hardware/status`, `GET /api/hardware/inventory`, and `POST /api/hardware/discover`.
+
 ### Run the included observability stack
 
 The `deploy/observability` directory contains a small-lab, single-binary Loki deployment, Grafana with a provisioned Loki data source, and Grafana Alloy collection for Docker, systemd journal, and TCP/UDP syslog.

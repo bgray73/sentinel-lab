@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { MonitoringService } from '../monitoring/service.js';
+import { HardwareService } from '../hardware/service.js';
 import { CmdbService } from './service.js';
 
 const directories: string[] = [];
@@ -12,8 +13,9 @@ async function services() {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'sentinel-cmdb-'));
   directories.push(directory);
   const monitoring = new MonitoringService({ SENTINEL_DATA_FILE: path.join(directory, 'monitoring.json') });
-  const cmdb = new CmdbService({ SENTINEL_CMDB_FILE: path.join(directory, 'cmdb.json') }, monitoring);
-  await Promise.all([monitoring.ready, cmdb.ready]);
+  const hardware = new HardwareService({});
+  const cmdb = new CmdbService({ SENTINEL_CMDB_FILE: path.join(directory, 'cmdb.json') }, monitoring, hardware);
+  await Promise.all([monitoring.ready, hardware.ready, cmdb.ready]);
   return cmdb;
 }
 
@@ -23,6 +25,8 @@ describe('configuration management database', () => {
     expect(cmdb.list().some(item => item.class === 'node' && item.source === 'proxmox')).toBe(true);
     expect(cmdb.list().some(item => item.class === 'container' && item.source === 'docker')).toBe(true);
     expect(cmdb.list().some(item => item.class === 'service' && item.source === 'monitoring')).toBe(true);
+    expect(cmdb.list().some(item => item.class === 'physical_server' && item.source === 'hardware')).toBe(true);
+    expect(cmdb.list().some(item => item.class === 'ups' && item.source === 'hardware')).toBe(true);
     expect(cmdb.relationships().some(relation => relation.type === 'hosts')).toBe(true);
     const count = cmdb.list().length;
     await cmdb.reconcile();
