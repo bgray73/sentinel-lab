@@ -186,6 +186,44 @@ export SENTINEL_CMDB_FILE=/var/lib/sentinel/cmdb.json
 
 Do not merge the repositories wholesale yet. LabOps already has OIDC, PostgreSQL, device inventory, incidents, maintenance, reports, and webhooks, so it is the stronger long-term control plane and authoritative CMDB. SentinelLab should initially remain the specialized Proxmox/Docker discovery and telemetry provider, integrated through the versioned CMDB snapshot and metrics APIs. Once this boundary is proven, Sentinel modules can be moved into the LabOps monorepo without carrying duplicate inventory and incident implementations forward.
 
+## Stage 9: Centralized logging with Loki
+
+The **Logs** page searches centralized events, filters by time, level, source, service, and message text, and uses stable CMDB external identifiers to connect log evidence to infrastructure and services. Active incidents can be investigated directly; Sentinel queries logs for the affected service and its confirmed upstream dependencies.
+
+Sentinel emits structured JSON request logs to standard output. Sensitive fields whose names resemble passwords, secrets, tokens, API keys, authorization headers, or cookies are redacted before output. Loki remains the raw-log system of record; Sentinel stores and displays investigation results without duplicating Loki's database.
+
+When `LOKI_URL` is absent, the Logs page uses safe simulated data. To connect Sentinel to a private Loki endpoint:
+
+```bash
+export LOKI_URL=http://loki.internal:3100
+export LOKI_ALLOW_HTTP=true
+export LOKI_TIMEOUT_MS=5000
+pnpm start
+```
+
+Prefer HTTPS whenever Loki crosses a host or trust boundary. Plain HTTP requires the explicit `LOKI_ALLOW_HTTP=true` acknowledgement.
+
+### Run the included observability stack
+
+The `deploy/observability` directory contains a small-lab, single-binary Loki deployment, Grafana with a provisioned Loki data source, and Grafana Alloy collection for Docker, systemd journal, and TCP/UDP syslog.
+
+```bash
+cd deploy/observability
+cp .env.example .env
+# Replace the sample Grafana password and review every bind address.
+docker compose up -d
+```
+
+Safe defaults bind Grafana, Alloy's UI, and the syslog receiver to localhost. Place Grafana behind LabOps OIDC, an authenticated reverse proxy, or a private Tailscale/management network before changing a bind address. The Docker socket is mounted read-only but still exposes highly privileged host metadata to Alloy; do not expose Alloy's API publicly.
+
+The sample Loki configuration keeps logs for 30 days. Retention is time-based rather than free-space-based, so monitor the Loki volume and size it with headroom. For higher availability or more than small-lab volume, replace the filesystem backend with supported object storage and move beyond the included single-instance Compose deployment.
+
+### Logging endpoints
+
+- `GET /api/logs/status` reports simulation/live mode without returning credentials.
+- `GET /api/logs` accepts `range`, `limit`, `level`, `source`, `service`, `ciId`, and `search` filters.
+- `GET /api/logs/incidents/:id/correlation` returns log evidence for an incident's monitored service and confirmed dependencies.
+
 ## Verify
 
 ```bash

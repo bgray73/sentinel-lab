@@ -6,3 +6,4 @@ dist
 .sentinel/
 data/*.db
 data/*.db-*
+deploy/observability/.env
