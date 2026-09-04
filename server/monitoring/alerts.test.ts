@@ -36,4 +36,10 @@ describe('alert and incident lifecycle', () => {
     await expect(service.addDependency({ monitorId: 'missing', resourceId: 'lxc/202' })).rejects.toThrow('does not exist');
     await service.removeDependency(mapping.id); expect(service.dependencies()).toEqual([]);
   });
+
+  it('validates and updates metric retention',async()=>{
+    const directory=await mkdtemp(path.join(os.tmpdir(),'sentinel-retention-'));directories.push(directory);const service=new MonitoringService({SENTINEL_DATA_FILE:path.join(directory,'data.json')});await service.ready;
+    await expect(service.updateRetention({days:0,maxResults:5000})).rejects.toThrow('between 1 and 365');
+    expect(await service.updateRetention({days:90,maxResults:5000})).toEqual({days:90,maxResults:5000});expect(service.retention()).toEqual({days:90,maxResults:5000});
+  });
 });

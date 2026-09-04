@@ -56,4 +56,10 @@ export type NotificationDelivery = {
   attemptedAt: string;
 };
 export type DependencyMapping = { id: string; monitorId: string; resourceId: string; createdAt: string };
-export type MonitoringData = { monitors: Monitor[]; results: MonitorResult[]; alertRules: AlertRule[]; incidents: Incident[]; deliveries: NotificationDelivery[]; dependencyMappings: DependencyMapping[] };
+export type RetentionPolicy = { days:number; maxResults:number };
+export type MetricRange = '1h'|'6h'|'24h'|'7d'|'30d';
+export type MetricPoint = { timestamp:string; checks:number; failures:number; availabilityPercent:number|null; avgLatencyMs:number|null };
+export type MetricSummary = { checks:number; failures:number; availabilityPercent:number|null; avgLatencyMs:number|null; p95LatencyMs:number|null };
+export type MonitorMetricSeries = { monitorId:string; name:string; protocol:MonitorProtocol; currentStatus:'up'|'down'|'pending'; summary:MetricSummary; points:MetricPoint[] };
+export type MetricsSnapshot = { range:MetricRange; start:string; end:string; bucketSeconds:number; retainedResults:number; retention:RetentionPolicy; overall:MetricSummary&{activeIncidents:number;enabledRules:number}; series:MonitorMetricSeries[] };
+export type MonitoringData = { monitors: Monitor[]; results: MonitorResult[]; alertRules: AlertRule[]; incidents: Incident[]; deliveries: NotificationDelivery[]; dependencyMappings: DependencyMapping[]; retentionPolicy:RetentionPolicy };

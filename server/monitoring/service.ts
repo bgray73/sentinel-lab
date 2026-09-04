@@ -1,8 +1,9 @@
 import path from 'node:path';
 import { calculateHealth, runMonitorCheck } from './checks.js';
+import { buildMetrics, isMetricRange, prometheusMetrics } from '../metrics/analytics.js';
 import { NotificationDispatcher } from './notifications.js';
 import { MonitoringStore } from './store.js';
-import type { AlertRule, AlertSeverity, DependencyMapping, Incident, Monitor, MonitoringData, MonitorProtocol, MonitorResult, MonitorView, NotificationDelivery } from './types.js';
+import type { AlertRule, AlertSeverity, DependencyMapping, Incident, MetricRange, Monitor, MonitoringData, MonitorProtocol, MonitorResult, MonitorView, NotificationDelivery, RetentionPolicy } from './types.js';
 
 const defaultMonitors: Monitor[] = [
   { id: 'monitor-web', name: 'Sentinel web interface', protocol: 'http', target: 'https://sentinel.example.test/health', intervalSeconds: 60, timeoutMs: 5000, enabled: true, expectedStatus: 200, createdAt: new Date().toISOString() },
@@ -12,7 +13,7 @@ const defaultMonitors: Monitor[] = [
 const defaultAlertRule: AlertRule = { id: 'alert-consecutive-failures', name: 'Repeated service failure', monitorId: '*', failureThreshold: 2, cooldownSeconds: 900, severity: 'critical', enabled: true, createdAt: new Date().toISOString() };
 
 export class MonitoringService {
-  private data: MonitoringData = { monitors: [], results: [], alertRules: [], incidents: [], deliveries: [], dependencyMappings: [] };
+  private data: MonitoringData = { monitors: [], results: [], alertRules: [], incidents: [], deliveries: [], dependencyMappings: [], retentionPolicy:{days:30,maxResults:25_000} };
   readonly ready: Promise<void>;
   private readonly simulate: boolean;
   private readonly store: MonitoringStore;
@@ -26,6 +27,7 @@ export class MonitoringService {
   }
   private async initialize() {
     this.data = await this.store.load();
+    this.pruneResults();
     if (!this.data.monitors.length && this.simulate) { this.data.monitors = defaultMonitors; await this.store.save(this.data); }
     if (!this.data.alertRules.length) { this.data.alertRules = [defaultAlertRule]; await this.store.save(this.data); }
     const timer = setInterval(() => void this.runDue(), 10_000); timer.unref();
@@ -42,6 +44,15 @@ export class MonitoringService {
   incidents(status?: string) { return this.data.incidents.filter(incident => !status || incident.status === status); }
   deliveries(limit = 100) { return this.data.deliveries.slice(0, Math.min(Math.max(limit, 1), 500)); }
   notificationStatus() { return this.notifications.status(); }
+  retention() { return this.data.retentionPolicy; }
+  metrics(rangeValue:string='24h') { if(!isMetricRange(rangeValue))throw new Error('Range must be 1h, 6h, 24h, 7d, or 30d');return buildMetrics(this.list(),this.data.results,this.data.incidents,this.data.alertRules,this.data.retentionPolicy,rangeValue as MetricRange); }
+  prometheus() { return prometheusMetrics(this.list(),this.data.results,this.data.incidents,this.data.alertRules,this.mode()); }
+  async updateRetention(input:Record<string,unknown>) {
+    const days=Number(input.days??this.data.retentionPolicy.days); const maxResults=Number(input.maxResults??this.data.retentionPolicy.maxResults);
+    if(!Number.isInteger(days)||days<1||days>365)throw new Error('Retention must be between 1 and 365 days');
+    if(!Number.isInteger(maxResults)||maxResults<1_000||maxResults>100_000)throw new Error('Maximum results must be between 1000 and 100000');
+    this.data.retentionPolicy={days,maxResults} satisfies RetentionPolicy; this.pruneResults(); await this.store.save(this.data); return this.data.retentionPolicy;
+  }
   dependencies() { return this.data.dependencyMappings; }
   async addDependency(input: Record<string, unknown>) {
     const monitorId = String(input.monitorId || '').trim(); const resourceId = String(input.resourceId || '').trim();
@@ -92,7 +103,8 @@ export class MonitoringService {
     const result = await runMonitorCheck(monitor, this.simulate); await this.record(result); return result;
   }
   async runAll() { const results: MonitorResult[] = []; for (const monitor of this.data.monitors.filter(item => item.enabled)) results.push(await this.run(monitor.id)); return results; }
-  private async record(result: MonitorResult) { this.data.results.unshift(result); this.data.results = this.data.results.slice(0, 5_000); await this.evaluateAlerts(result); await this.store.save(this.data); }
+  private async record(result: MonitorResult) { this.data.results.unshift(result); this.pruneResults(); await this.evaluateAlerts(result); await this.store.save(this.data); }
+  private pruneResults() { const cutoff=Date.now()-this.data.retentionPolicy.days*86_400_000; this.data.results=this.data.results.filter(result=>new Date(result.checkedAt).getTime()>=cutoff).slice(0,this.data.retentionPolicy.maxResults); }
   private async evaluateAlerts(result: MonitorResult) {
     const active = this.data.incidents.filter(incident => incident.monitorId === result.monitorId && incident.status !== 'resolved');
     if (result.status === 'up') {

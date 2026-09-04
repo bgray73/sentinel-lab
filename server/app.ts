@@ -26,6 +26,18 @@ export function createApp(store: Store, monitoring?: MonitoringService) {
     if (!monitoring) return res.status(503).json({ error: 'Monitoring service is not available' });
     await monitoring.ready; return res.json(monitoring.history(typeof req.query.monitorId === 'string' ? req.query.monitorId : undefined, Number(req.query.limit || 100)));
   });
+  app.get('/api/metrics', async (req,res)=>{
+    if(!monitoring)return res.status(503).json({error:'Monitoring service is not available'});
+    try{await monitoring.ready;return res.json(monitoring.metrics(typeof req.query.range==='string'?req.query.range:'24h'));}catch(error){return res.status(400).json({error:error instanceof Error?error.message:'Invalid metrics range'});}
+  });
+  app.put('/api/metrics/settings',async(req,res)=>{
+    if(!monitoring)return res.status(503).json({error:'Monitoring service is not available'});
+    try{await monitoring.ready;return res.json(await monitoring.updateRetention(req.body||{}));}catch(error){return res.status(400).json({error:error instanceof Error?error.message:'Invalid retention settings'});}
+  });
+  app.get('/metrics',async(_req,res)=>{
+    if(!monitoring)return res.status(503).type('text/plain').send('Monitoring service is not available\n');
+    await monitoring.ready;res.set('Content-Type','text/plain; version=0.0.4; charset=utf-8');return res.send(monitoring.prometheus());
+  });
   app.post('/api/monitors', async (req, res) => {
     if (!monitoring) return res.status(503).json({ error: 'Monitoring service is not available' });
     try { await monitoring.ready; return res.status(201).json(await monitoring.add(req.body || {})); }
