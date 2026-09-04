@@ -19,8 +19,9 @@ import type { HardwareService } from './hardware/service.js';
 import type { Run, TestResult } from './types.js';
 import { authConfigFromEnvironment, authenticate, authorize, session, type AuthConfig, type Identity } from './auth.js';
 import { SecurityAuditService } from './security/service.js';
+import type { BackupService } from './backup/service.js';
 
-export function createApp(store: Store, monitoring?: MonitoringService, telemetry?: TelemetryService, cmdb?: CmdbService, logs?: LokiService, hardware?: HardwareService, log: StructuredLogger = defaultLogger, auth: AuthConfig = authConfigFromEnvironment(), security: SecurityAuditService = new SecurityAuditService()) {
+export function createApp(store: Store, monitoring?: MonitoringService, telemetry?: TelemetryService, cmdb?: CmdbService, logs?: LokiService, hardware?: HardwareService, log: StructuredLogger = defaultLogger, auth: AuthConfig = authConfigFromEnvironment(), security: SecurityAuditService = new SecurityAuditService(), backups?: BackupService) {
   const app = express();
   app.disable('x-powered-by');
   app.use((req, res, next) => {
@@ -45,6 +46,20 @@ export function createApp(store: Store, monitoring?: MonitoringService, telemetr
     const type = typeof req.query.type === 'string' && types.has(req.query.type) ? req.query.type as 'session_authenticated' | 'authentication_failed' | 'authorization_denied' : undefined;
     return res.json(await security.snapshot(Number(req.query.limit || 200), type));
   });
+  app.get('/api/backups', async (_req, res) => {
+    if (!backups) return res.status(503).json({ error: 'Backup service is not available' });
+    return res.json(await backups.list());
+  });
+  app.post('/api/backups', async (_req, res) => {
+    if (!backups) return res.status(503).json({ error: 'Backup service is not available' });
+    try { return res.status(201).json(await backups.create('manual')); }
+    catch (error) { return res.status(500).json({ error: error instanceof Error ? error.message : 'Backup failed' }); }
+  });
+  app.post('/api/backups/:id/verify', async (req, res) => {
+    if (!backups) return res.status(503).json({ error: 'Backup service is not available' });
+    const result = await backups.verify(req.params.id);
+    return res.status(result.verified ? 200 : 422).json(result);
+  });
   app.get('/api/monitors', async (_req, res) => {
     if (!monitoring) return res.status(503).json({ error: 'Monitoring service is not available' });
     await monitoring.ready; return res.json({ mode: monitoring.mode(), monitors: monitoring.list() });
@@ -63,7 +78,7 @@ export function createApp(store: Store, monitoring?: MonitoringService, telemetr
   });
   app.get('/metrics',async(_req,res)=>{
     if(!monitoring)return res.status(503).type('text/plain').send('Monitoring service is not available\n');
-    await monitoring.ready;if(telemetry)await telemetry.ready;if(hardware)await hardware.ready;res.set('Content-Type','text/plain; version=0.0.4; charset=utf-8');return res.send(`${monitoring.prometheus()}${telemetry?.prometheus()||''}${hardware?.prometheus()||''}${await security.prometheus()}`);
+    await monitoring.ready;if(telemetry)await telemetry.ready;if(hardware)await hardware.ready;res.set('Content-Type','text/plain; version=0.0.4; charset=utf-8');return res.send(`${monitoring.prometheus()}${telemetry?.prometheus()||''}${hardware?.prometheus()||''}${await security.prometheus()}${backups?await backups.prometheus():''}`);
   });
   app.get('/api/infrastructure/metrics/status',async(_req,res)=>{if(!telemetry)return res.status(503).json({error:'Telemetry service is not available'});await telemetry.ready;return res.json(telemetry.status())});
   app.get('/api/infrastructure/metrics',async(req,res)=>{if(!telemetry)return res.status(503).json({error:'Telemetry service is not available'});try{await telemetry.ready;return res.json(telemetry.metrics(typeof req.query.range==='string'?req.query.range:'24h'))}catch(error){return res.status(400).json({error:error instanceof Error?error.message:'Invalid telemetry range'})}});

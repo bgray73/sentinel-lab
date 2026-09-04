@@ -7,6 +7,7 @@ import { CmdbService } from './cmdb/service.js';
 import { LokiService } from './logging/service.js';
 import { HardwareService } from './hardware/service.js';
 import { SecurityAuditService } from './security/service.js';
+import { BackupService } from './backup/service.js';
 
 const port = Number(process.env.PORT || 4100);
 const store = new Store(process.env.DATABASE_PATH || resolve('data/sentinel.db'));
@@ -16,4 +17,5 @@ const hardware = new HardwareService();
 const cmdb = new CmdbService(process.env, monitoring, hardware);
 const logs = new LokiService();
 const security = new SecurityAuditService();
-createApp(store, monitoring, telemetry, cmdb, logs, hardware, undefined, undefined, security).listen(port, '0.0.0.0', () => console.log(JSON.stringify({ timestamp: new Date().toISOString(), level: 'info', service: 'sentinel-api', message: 'api_started', port })));
+const backups = new BackupService(store);
+createApp(store, monitoring, telemetry, cmdb, logs, hardware, undefined, undefined, security, backups).listen(port, '0.0.0.0', () => console.log(JSON.stringify({ timestamp: new Date().toISOString(), level: 'info', service: 'sentinel-api', message: 'api_started', port })));

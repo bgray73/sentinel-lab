@@ -361,3 +361,22 @@ The gateway uses secure cookies, so terminate trusted HTTPS in front of its loop
 Administrators now have a **Security** page that reports authenticated sessions, failed authentication, authorization denials, source addresses, requested paths, and required roles. Events persist with owner-only permissions at `/var/lib/sentinel/security-audit.json`. Defaults retain 90 days and at most 10,000 events; configure `SENTINEL_AUTH_AUDIT_RETENTION_DAYS` and `SENTINEL_AUTH_AUDIT_MAX_EVENTS` to change those limits.
 
 `GET /api/security/events` is administrator-only and accepts `limit` plus a `type` filter of `session_authenticated`, `authentication_failed`, or `authorization_denied`. Prometheus also exports retained security-event, authentication-failure, and authorization-denial gauges.
+
+## Stage 15: backup, restore, and upgrade rollback
+
+Sentinel now creates checksummed recovery points containing a transactional SQLite snapshot plus every available monitoring, telemetry, CMDB, hardware-operations, and security-audit data file. Container deployments enable a backup every 24 hours and retain the newest 14 by default. Change `SENTINEL_BACKUPS_ENABLED`, `SENTINEL_BACKUP_INTERVAL_HOURS`, or `SENTINEL_BACKUP_MAX_COUNT` to adjust the policy.
+
+Administrators can create and verify recovery points from the **Recovery** page. The administrator-only endpoints are `GET /api/backups`, `POST /api/backups`, and `POST /api/backups/:id/verify`. `/metrics` includes retained-backup count, verified-backup count, and latest-backup age.
+
+Restores are deliberately offline and cannot be started from the browser. Stop Sentinel and provide the backup identifier twice:
+
+```bash
+docker compose -f docker-compose.oidc.yml stop sentinel
+docker compose -f docker-compose.oidc.yml run --rm --no-deps sentinel \
+  node server-dist/backup/restore.js --backup <backup-id> --confirm <backup-id>
+docker compose -f docker-compose.oidc.yml up -d
+```
+
+Every restore verifies SHA-256 checksums first and preserves the current files under `/var/lib/sentinel/restore-points`. For an application-only problem, roll back `SENTINEL_IMAGE` to the previous immutable `sha-...` tag instead of restoring data. See `deploy/sentinel/RECOVERY.md` for the complete checklist.
+
+The default backup directory is on the Sentinel data volume. That protects against bad upgrades but not host or disk loss. Mount `/var/lib/sentinel/backups` from a NAS or separately protected filesystem using the included backup-target override example, and perform a test restore regularly.
