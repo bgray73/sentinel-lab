@@ -14,9 +14,10 @@ import type { CmdbService } from './cmdb/service.js';
 import { logger as defaultLogger, requestLogger, type StructuredLogger } from './logging/logger.js';
 import type { LokiService } from './logging/service.js';
 import type { MonitoringService } from './monitoring/service.js';
+import type { HardwareService } from './hardware/service.js';
 import type { Run, TestResult } from './types.js';
 
-export function createApp(store: Store, monitoring?: MonitoringService, telemetry?: TelemetryService, cmdb?: CmdbService, logs?: LokiService, log: StructuredLogger = defaultLogger) {
+export function createApp(store: Store, monitoring?: MonitoringService, telemetry?: TelemetryService, cmdb?: CmdbService, logs?: LokiService, hardware?: HardwareService, log: StructuredLogger = defaultLogger) {
   const app = express();
   app.disable('x-powered-by');
   app.use(express.json({ limit: '32kb' }));
@@ -94,6 +95,19 @@ export function createApp(store: Store, monitoring?: MonitoringService, telemetr
   app.get('/api/logs/status', (_req, res) => {
     if (!logs) return res.status(503).json({ error: 'Logging service is not available' });
     return res.json(logs.status());
+  });
+  app.get('/api/hardware/status', async (_req, res) => {
+    if (!hardware) return res.status(503).json({ error: 'Hardware service is not available' });
+    await hardware.ready; return res.json(hardware.status());
+  });
+  app.get('/api/hardware/inventory', async (_req, res) => {
+    if (!hardware) return res.status(503).json({ error: 'Hardware service is not available' });
+    await hardware.ready; return res.json(hardware.inventory());
+  });
+  app.post('/api/hardware/discover', async (_req, res) => {
+    if (!hardware) return res.status(503).json({ error: 'Hardware service is not available' });
+    try { await hardware.ready; return res.json(await hardware.refresh()); }
+    catch (error) { return res.status(502).json({ error: error instanceof Error ? error.message : 'Hardware discovery failed' }); }
   });
   app.get('/api/logs', async (req, res) => {
     if (!logs) return res.status(503).json({ error: 'Logging service is not available' });
@@ -177,7 +191,8 @@ export function createApp(store: Store, monitoring?: MonitoringService, telemetr
     catch (error) { res.status(400).json({ configured: false, simulationAvailable: true, error: error instanceof Error ? error.message : 'Invalid Proxmox configuration' }); }
   });
   app.get('/api/connections', (_req, res) => {
-    const connections = { proxmox: { configured: false }, docker: { configured: false } };
+    const hardwareStatus = hardware?.status();
+    const connections = { proxmox: { configured: false }, docker: { configured: false }, redfish: { configured: Boolean(hardwareStatus?.redfishTargets), targets: hardwareStatus?.redfishTargets || 0 }, snmp: { configured: Boolean(hardwareStatus?.snmpTargets), targets: hardwareStatus?.snmpTargets || 0 } };
     try { connections.proxmox.configured = configFromEnvironment() !== null; } catch { connections.proxmox.configured = false; }
     try { connections.docker.configured = dockerConfigFromEnvironment() !== null; } catch { connections.docker.configured = false; }
     res.json(connections);

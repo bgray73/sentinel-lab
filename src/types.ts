@@ -58,7 +58,10 @@ export type DockerInventory = {
   containers: DockerContainer[];
   summary: { total: number; running: number; stopped: number; healthy: number; unhealthy: number; composeProjects: number };
 };
-export type ConnectionStatus = { proxmox: { configured: boolean }; docker: { configured: boolean } };
+export type ConnectionStatus = { proxmox: { configured: boolean }; docker: { configured: boolean }; redfish:{configured:boolean;targets:number}; snmp:{configured:boolean;targets:number} };
+export type HardwareComponent={id:string;name:string;type:string;health:HealthStatus;value?:number;unit?:string;detail?:string};
+export type HardwareDevice={id:string;externalId:string;name:string;source:'redfish'|'snmp';category:'physical_server'|'switch'|'router'|'ups'|'pdu'|'storage_appliance'|'other';health:HealthStatus;status:string;manufacturer?:string;model?:string;serialNumber?:string;firmwareVersion?:string;managementAddress:string;metrics:Record<string,number|undefined>;components:HardwareComponent[];attributes:Record<string,string|number|boolean|null>;collectedAt:string};
+export type HardwareInventory={mode:'simulation'|'live';collectedAt:string;devices:HardwareDevice[];summary:{devices:number;servers:number;networkDevices:number;powerDevices:number;healthy:number;warnings:number;critical:number;components:number}};
 
 export type MonitorProtocol = 'http' | 'tcp' | 'dns';
 export type MonitorResult = { id: string; monitorId: string; status: 'up' | 'down'; latencyMs: number; detail: string; checkedAt: string };
@@ -99,10 +102,10 @@ export type TelemetrySample={id:string;resourceId:string;name:string;type:'node'
 export type TelemetrySeries={resourceId:string;name:string;type:TelemetrySample['type'];source:TelemetrySample['source'];state:string;latest:TelemetrySample;points:TelemetryPoint[]};
 export type TelemetrySnapshot={range:MetricRange;start:string;end:string;bucketSeconds:number;summary:{resources:number;proxmoxResources:number;containers:number;warningResources:number;sampleCount:number};series:TelemetrySeries[]};
 
-export type CiClass='node'|'vm'|'lxc'|'storage'|'docker_host'|'application'|'container'|'service'|'database'|'network'|'other';
+export type CiClass='node'|'vm'|'lxc'|'storage'|'docker_host'|'application'|'container'|'service'|'database'|'network'|'physical_server'|'switch'|'router'|'ups'|'pdu'|'storage_appliance'|'other';
 export type CiLifecycle='active'|'stale'|'retired';
 export type CiCriticality='low'|'medium'|'high'|'critical';
-export type ConfigurationItem={id:string;externalId:string;class:CiClass;name:string;source:'proxmox'|'docker'|'monitoring'|'manual';lifecycle:CiLifecycle;status:string;environment:string;owner:string;criticality:CiCriticality;tags:string[];attributes:Record<string,string|number|boolean|null>;firstSeenAt:string;lastSeenAt:string;updatedAt:string;version:number};
+export type ConfigurationItem={id:string;externalId:string;class:CiClass;name:string;source:'proxmox'|'docker'|'monitoring'|'hardware'|'manual';lifecycle:CiLifecycle;status:string;environment:string;owner:string;criticality:CiCriticality;tags:string[];attributes:Record<string,string|number|boolean|null>;firstSeenAt:string;lastSeenAt:string;updatedAt:string;version:number};
 export type CmdbRelationship={id:string;fromId:string;toId:string;type:'contains'|'hosts'|'runs_on'|'depends_on'|'monitored_by'|'connected_to';source:ConfigurationItem['source'];createdAt:string};
 export type CmdbChange={id:string;ciId:string;action:string;fields:string[];actor:string;changedAt:string};
 export type CmdbStatus={mode:'simulation'|'live';intervalSeconds:number;lastReconciledAt:string|null;lastError:string;items:number;relationships:number;stale:number};

@@ -1,0 +1,9 @@
+auths:
+  sentinel_v3:
+    version: 3
+    security_level: authPriv
+    username: ${SNMP_USERNAME}
+    password: ${SNMP_AUTH_PASSWORD}
+    auth_protocol: SHA256
+    priv_protocol: AES
+    priv_password: ${SNMP_PRIV_PASSWORD}

@@ -1,5 +1,5 @@
-export type CiClass='node'|'vm'|'lxc'|'storage'|'docker_host'|'application'|'container'|'service'|'database'|'network'|'other';
-export type CiSource='proxmox'|'docker'|'monitoring'|'manual';
+export type CiClass='node'|'vm'|'lxc'|'storage'|'docker_host'|'application'|'container'|'service'|'database'|'network'|'physical_server'|'switch'|'router'|'ups'|'pdu'|'storage_appliance'|'other';
+export type CiSource='proxmox'|'docker'|'monitoring'|'hardware'|'manual';
 export type CiLifecycle='active'|'stale'|'retired';
 export type CiCriticality='low'|'medium'|'high'|'critical';
 export type ConfigurationItem={id:string;externalId:string;class:CiClass;name:string;source:CiSource;lifecycle:CiLifecycle;status:string;environment:string;owner:string;criticality:CiCriticality;tags:string[];attributes:Record<string,string|number|boolean|null>;firstSeenAt:string;lastSeenAt:string;updatedAt:string;version:number};
