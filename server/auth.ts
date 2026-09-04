@@ -1,6 +1,7 @@
 import { timingSafeEqual } from 'node:crypto';
 import type { NextFunction, Request, Response } from 'express';
 import type { StructuredLogger } from './logging/logger.js';
+import type { SecurityAuditService } from './security/service.js';
 
 export type AuthMode = 'disabled' | 'proxy';
 export type Role = 'viewer' | 'operator' | 'admin';
@@ -42,7 +43,7 @@ export function authConfigFromEnvironment(env: NodeJS.ProcessEnv = process.env):
   return config;
 }
 
-export function authenticate(config: AuthConfig, log: StructuredLogger) {
+export function authenticate(config: AuthConfig, log: StructuredLogger, audit?: SecurityAuditService) {
   return (req: Request, res: Response, next: NextFunction) => {
     if (config.mode === 'disabled') {
       res.locals.identity = { subject: 'local', name: 'Local administrator', groups: [], role: 'admin' } satisfies Identity;
@@ -58,12 +59,14 @@ export function authenticate(config: AuthConfig, log: StructuredLogger) {
     const suppliedSecret = header(req, 'x-sentinel-proxy-secret');
     if (!secureEqual(suppliedSecret, config.proxySecret)) {
       log.warn('authentication_failed', { method: req.method, path: req.path, reason: 'untrusted_proxy' });
+      audit?.record({ type: 'authentication_failed', severity: 'warning', method: req.method, path: req.path, reason: 'untrusted_proxy', sourceIp: req.socket.remoteAddress });
       return res.status(401).json({ error: 'Authentication required' });
     }
 
     const subject = header(req, 'x-forwarded-user');
     if (!subject) {
       log.warn('authentication_failed', { method: req.method, path: req.path, reason: 'missing_identity' });
+      audit?.record({ type: 'authentication_failed', severity: 'warning', method: req.method, path: req.path, reason: 'missing_identity', sourceIp: req.socket.remoteAddress });
       return res.status(401).json({ error: 'Authenticated user header is missing' });
     }
     const groups = list(header(req, 'x-forwarded-groups'));
@@ -75,17 +78,19 @@ export function authenticate(config: AuthConfig, log: StructuredLogger) {
       role: resolveRole(groups, config)
     };
     res.locals.identity = identity;
+    if (req.path === '/api/session') audit?.record({ type: 'session_authenticated', severity: 'info', subject: identity.subject, role: identity.role, method: req.method, path: req.path, sourceIp: trustedSourceIp(req) });
     return next();
   };
 }
 
-export function authorize(log: StructuredLogger) {
+export function authorize(log: StructuredLogger, audit?: SecurityAuditService) {
   return (req: Request, res: Response, next: NextFunction) => {
     const identity = res.locals.identity as Identity | undefined;
     if (!identity) return res.status(401).json({ error: 'Authentication required' });
     const required = requiredRole(req);
     if (roleRank[identity.role] < roleRank[required]) {
       log.warn('authorization_denied', { subject: identity.subject, role: identity.role, requiredRole: required, method: req.method, path: req.path });
+      audit?.record({ type: 'authorization_denied', severity: 'warning', subject: identity.subject, role: identity.role, requiredRole: required, method: req.method, path: req.path, sourceIp: trustedSourceIp(req) });
       return res.status(403).json({ error: `${required} role required`, requiredRole: required });
     }
     return next();
@@ -97,6 +102,7 @@ export function session(config: AuthConfig, identity: Identity) {
 }
 
 function requiredRole(req: Request): Role {
+  if (req.path.startsWith('/api/security/')) return 'admin';
   if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return 'viewer';
   const operatorRoutes = [
     /^\/api\/runs$/,
@@ -145,4 +151,8 @@ function secureEqual(actual?: string, expected?: string) {
   if (!actual || !expected) return false;
   const left = Buffer.from(actual); const right = Buffer.from(expected);
   return left.length === right.length && timingSafeEqual(left, right);
+}
+
+function trustedSourceIp(req: Request) {
+  return header(req, 'x-forwarded-for').split(',')[0]?.trim() || req.socket.remoteAddress;
 }

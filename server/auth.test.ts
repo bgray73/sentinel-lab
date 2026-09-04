@@ -5,6 +5,7 @@ import { createApp } from './app.js';
 import { authConfigFromEnvironment, type AuthConfig } from './auth.js';
 import { StructuredLogger } from './logging/logger.js';
 import { Store } from './store.js';
+import { SecurityAuditService } from './security/service.js';
 
 const proxySecret = 'stage-13-proxy-secret-with-32-characters';
 const config: AuthConfig = { mode: 'proxy', proxySecret, adminGroups: ['admins'], operatorGroups: ['operators'] };
@@ -45,9 +46,19 @@ describe('authentication and authorization', () => {
     expect(response.status).toBe(201);
   });
 
+  it('restricts retained security events to administrators', async () => {
+    const base = await start(config);
+    const viewer = proxyHeaders('viewer', 'everyone');
+    expect((await fetch(`${base}/api/security/events`, { headers: viewer })).status).toBe(403);
+    const admin = proxyHeaders('admin', 'admins');
+    const response = await fetch(`${base}/api/security/events`, { headers: admin });
+    expect(response.status).toBe(200);
+    expect((await response.json()).summary.denied).toBe(1);
+  });
+
   async function start(auth: AuthConfig) {
     store = new Store(':memory:');
-    server = createApp(store, undefined, undefined, undefined, undefined, undefined, new StructuredLogger(() => {}), auth).listen(0, '127.0.0.1');
+    server = createApp(store, undefined, undefined, undefined, undefined, undefined, new StructuredLogger(() => {}), auth, new SecurityAuditService({}, false)).listen(0, '127.0.0.1');
     await new Promise<void>((resolve, reject) => { server?.once('listening', resolve); server?.once('error', reject); });
     return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   }

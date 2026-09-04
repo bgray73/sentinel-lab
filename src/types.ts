@@ -121,3 +121,6 @@ export type LogSearchResult={mode:'simulation'|'live';query:string;range:LogRang
 export type IncidentLogCorrelation=LogSearchResult&{incident:Incident;relatedConfigurationItems:string[]};
 export type SentinelRole = 'viewer' | 'operator' | 'admin';
 export interface Session { mode: 'disabled' | 'proxy'; user: { subject: string; name: string; email?: string; groups: string[]; role: SentinelRole; service?: boolean }; permissions: { operate: boolean; administer: boolean } }
+export type SecurityEventType = 'session_authenticated' | 'authentication_failed' | 'authorization_denied';
+export interface SecurityEvent { id:string;timestamp:string;type:SecurityEventType;severity:'info'|'warning';subject?:string;role?:SentinelRole;method:string;path:string;sourceIp?:string;reason?:string;requiredRole?:SentinelRole }
+export interface SecuritySnapshot { events:SecurityEvent[];summary:{retained:number;failures:number;denied:number;sessions:number};retention:{days:number;maxEvents:number} }

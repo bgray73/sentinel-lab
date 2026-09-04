@@ -21,3 +21,14 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
       - run: pnpm build:production
+      - name: Validate deployment definitions
+        env:
+          SENTINEL_AUTH_PROXY_SECRET: stage-14-ci-proxy-secret-1234567890
+          SENTINEL_OIDC_ISSUER_URL: https://identity.example.test
+          SENTINEL_OIDC_CLIENT_ID: sentinel-ci
+          SENTINEL_OIDC_CLIENT_SECRET: stage-14-ci-client-secret
+          SENTINEL_OIDC_COOKIE_SECRET: c3RhZ2UtMTQtY2ktY29va2llLXNlY3JldA==
+          SENTINEL_OIDC_REDIRECT_URL: https://sentinel.example.test/oauth2/callback
+        run: |
+          docker compose -f deploy/sentinel/docker-compose.yml config >/dev/null
+          docker compose -f deploy/sentinel/docker-compose.oidc.yml config >/dev/null

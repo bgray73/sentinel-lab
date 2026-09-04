@@ -1,0 +1,103 @@
+services:
+  sentinel:
+    image: ${SENTINEL_IMAGE:-ghcr.io/bgray73/sentinel-lab:latest}
+    restart: unless-stopped
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    environment:
+      PORT: 4100
+      DATABASE_PATH: /var/lib/sentinel/sentinel.db
+      SENTINEL_DATA_FILE: /var/lib/sentinel/monitoring.json
+      SENTINEL_TELEMETRY_FILE: /var/lib/sentinel/telemetry.json
+      SENTINEL_CMDB_FILE: /var/lib/sentinel/cmdb.json
+      SENTINEL_HARDWARE_OPERATIONS_FILE: /var/lib/sentinel/hardware-operations.json
+      SENTINEL_AUTH_AUDIT_FILE: /var/lib/sentinel/security-audit.json
+      SENTINEL_AUTH_AUDIT_RETENTION_DAYS: ${SENTINEL_AUTH_AUDIT_RETENTION_DAYS:-90}
+      SENTINEL_AUTH_AUDIT_MAX_EVENTS: ${SENTINEL_AUTH_AUDIT_MAX_EVENTS:-10000}
+      SENTINEL_AUTH_MODE: proxy
+      SENTINEL_AUTH_PROXY_SECRET: ${SENTINEL_AUTH_PROXY_SECRET:?set a random 32-character proxy secret}
+      SENTINEL_AUTH_ADMIN_GROUPS: ${SENTINEL_AUTH_ADMIN_GROUPS:-sentinel-admins}
+      SENTINEL_AUTH_OPERATOR_GROUPS: ${SENTINEL_AUTH_OPERATOR_GROUPS:-sentinel-operators}
+      SENTINEL_METRICS_TOKEN: ${SENTINEL_METRICS_TOKEN:-}
+      SENTINEL_REAL_CHECKS: ${SENTINEL_REAL_CHECKS:-false}
+      SENTINEL_REAL_NOTIFICATIONS: ${SENTINEL_REAL_NOTIFICATIONS:-false}
+      SENTINEL_REAL_TELEMETRY: ${SENTINEL_REAL_TELEMETRY:-false}
+      SENTINEL_REAL_CMDB: ${SENTINEL_REAL_CMDB:-false}
+      SENTINEL_REAL_HARDWARE: ${SENTINEL_REAL_HARDWARE:-false}
+      PVE_URL: ${PVE_URL:-}
+      PVE_TOKEN_ID: ${PVE_TOKEN_ID:-}
+      PVE_TOKEN_SECRET: ${PVE_TOKEN_SECRET:-}
+      LOKI_URL: ${LOKI_URL:-}
+      LABOPS_EXPORT_TOKEN: ${LABOPS_EXPORT_TOKEN:-}
+      SENTINEL_REDFISH_TARGETS: "${SENTINEL_REDFISH_TARGETS:-[]}"
+      SNMP_EXPORTER_URL: ${SNMP_EXPORTER_URL:-}
+      SENTINEL_SNMP_TARGETS: "${SENTINEL_SNMP_TARGETS:-[]}"
+    tmpfs: [/tmp:size=32m,mode=1777]
+    volumes: [sentinel-data:/var/lib/sentinel]
+    networks: [sentinel-backend]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4100/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+
+  auth-bridge:
+    image: caddy:2.11.4-alpine
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    environment:
+      SENTINEL_AUTH_PROXY_SECRET: ${SENTINEL_AUTH_PROXY_SECRET:?set a random 32-character proxy secret}
+    volumes:
+      - ./Caddyfile.oidc:/etc/caddy/Caddyfile:ro
+    tmpfs:
+      - /data:size=32m
+      - /config:size=8m
+    networks: [sentinel-backend]
+    depends_on:
+      sentinel:
+        condition: service_healthy
+
+  oidc-gateway:
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.4
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    ports:
+      - "${SENTINEL_BIND_ADDRESS:-127.0.0.1}:${SENTINEL_OIDC_PORT:-4180}:4180"
+    environment:
+      OAUTH2_PROXY_PROVIDER: oidc
+      OAUTH2_PROXY_OIDC_ISSUER_URL: ${SENTINEL_OIDC_ISSUER_URL:?set the OIDC issuer URL}
+      OAUTH2_PROXY_CLIENT_ID: ${SENTINEL_OIDC_CLIENT_ID:?set the OIDC client ID}
+      OAUTH2_PROXY_CLIENT_SECRET: ${SENTINEL_OIDC_CLIENT_SECRET:?set the OIDC client secret}
+      OAUTH2_PROXY_COOKIE_SECRET: ${SENTINEL_OIDC_COOKIE_SECRET:?set an OAuth2 Proxy cookie secret}
+      OAUTH2_PROXY_REDIRECT_URL: ${SENTINEL_OIDC_REDIRECT_URL:?set the registered callback URL}
+      OAUTH2_PROXY_UPSTREAMS: http://auth-bridge:8080
+      OAUTH2_PROXY_HTTP_ADDRESS: 0.0.0.0:4180
+      OAUTH2_PROXY_EMAIL_DOMAINS: "*"
+      OAUTH2_PROXY_SCOPE: openid profile email groups
+      OAUTH2_PROXY_PASS_USER_HEADERS: "true"
+      OAUTH2_PROXY_PASS_AUTHORIZATION_HEADER: "false"
+      OAUTH2_PROXY_SET_AUTHORIZATION_HEADER: "false"
+      OAUTH2_PROXY_SKIP_PROVIDER_BUTTON: "true"
+      OAUTH2_PROXY_COOKIE_SECURE: "true"
+      OAUTH2_PROXY_COOKIE_HTTPONLY: "true"
+      OAUTH2_PROXY_COOKIE_SAMESITE: lax
+      OAUTH2_PROXY_REVERSE_PROXY: "true"
+      OAUTH2_PROXY_SKIP_AUTH_ROUTES: ^/api/health$
+    tmpfs: [/tmp:size=16m,mode=1777]
+    networks: [sentinel-edge, sentinel-backend]
+    depends_on: [auth-bridge]
+
+volumes:
+  sentinel-data:
+
+networks:
+  sentinel-edge:
+  sentinel-backend:
+    internal: true
