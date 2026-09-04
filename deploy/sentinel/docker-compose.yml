@@ -1,0 +1,47 @@
+services:
+  sentinel:
+    image: ${SENTINEL_IMAGE:-sentinel-lab:local}
+    build:
+      context: ../..
+    restart: unless-stopped
+    init: true
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - "${SENTINEL_BIND_ADDRESS:-127.0.0.1}:${SENTINEL_PORT:-4100}:4100"
+    environment:
+      PORT: 4100
+      DATABASE_PATH: /var/lib/sentinel/sentinel.db
+      SENTINEL_DATA_FILE: /var/lib/sentinel/monitoring.json
+      SENTINEL_TELEMETRY_FILE: /var/lib/sentinel/telemetry.json
+      SENTINEL_CMDB_FILE: /var/lib/sentinel/cmdb.json
+      SENTINEL_HARDWARE_OPERATIONS_FILE: /var/lib/sentinel/hardware-operations.json
+      SENTINEL_REAL_CHECKS: ${SENTINEL_REAL_CHECKS:-false}
+      SENTINEL_REAL_NOTIFICATIONS: ${SENTINEL_REAL_NOTIFICATIONS:-false}
+      SENTINEL_REAL_TELEMETRY: ${SENTINEL_REAL_TELEMETRY:-false}
+      SENTINEL_REAL_CMDB: ${SENTINEL_REAL_CMDB:-false}
+      SENTINEL_REAL_HARDWARE: ${SENTINEL_REAL_HARDWARE:-false}
+      PVE_URL: ${PVE_URL:-}
+      PVE_TOKEN_ID: ${PVE_TOKEN_ID:-}
+      PVE_TOKEN_SECRET: ${PVE_TOKEN_SECRET:-}
+      LOKI_URL: ${LOKI_URL:-}
+      LABOPS_EXPORT_TOKEN: ${LABOPS_EXPORT_TOKEN:-}
+      SENTINEL_REDFISH_TARGETS: "${SENTINEL_REDFISH_TARGETS:-[]}"
+      SNMP_EXPORTER_URL: ${SNMP_EXPORTER_URL:-}
+      SENTINEL_SNMP_TARGETS: "${SENTINEL_SNMP_TARGETS:-[]}"
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+    volumes:
+      - sentinel-data:/var/lib/sentinel
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4100/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+
+volumes:
+  sentinel-data:

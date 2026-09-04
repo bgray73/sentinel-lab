@@ -1,0 +1,6 @@
+services:
+  sentinel:
+    environment:
+      DOCKER_SOCKET_PATH: /var/run/docker.sock
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro

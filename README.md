@@ -281,5 +281,30 @@ The sample Loki configuration keeps logs for 30 days. Retention is time-based ra
 
 ```bash
 pnpm test
-pnpm build
+pnpm build:production
 ```
+
+## Stage 12: secure container deployment
+
+Stage 12 packages the dashboard and API into one production image. The process runs as an unprivileged user, writes only to `/var/lib/sentinel`, exposes an application health check, and adds defensive browser headers. The supplied Compose service drops Linux capabilities, prevents privilege escalation, uses a read-only root filesystem, and binds to `127.0.0.1` by default.
+
+```bash
+cd deploy/sentinel
+cp .env.example .env
+docker compose up -d --build
+docker compose ps
+```
+
+Open `http://127.0.0.1:4100`. Keep this loopback binding for a workstation preview. For access from another device, put Sentinel behind LabOps OIDC, an authenticated reverse proxy, or a private management-network gateway before changing `SENTINEL_BIND_ADDRESS`. The application itself does not yet provide interactive user authentication.
+
+All database and JSON state is retained in the `sentinel-data` volume. Back up that volume before replacing a host. The default `.env.example` leaves discovery, checks, notifications, telemetry, CMDB reconciliation, and hardware polling in simulation mode. Add credentials to the untracked `.env` file and enable each live feature only after the network boundary is protected.
+
+Docker discovery requires privileged host metadata. Enable it only on a trusted Sentinel host with the explicit override:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.live-docker.yml up -d
+```
+
+The socket is mounted read-only, but Docker socket access can still effectively control the host. Do not expose the Sentinel API to untrusted users when this override is active.
+
+The `Container` GitHub Actions workflow builds the image for every pull request. Merges to `main` also publish `ghcr.io/bgray73/sentinel-lab:latest` and an immutable commit-SHA tag to GitHub Container Registry.
