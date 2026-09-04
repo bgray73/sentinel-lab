@@ -308,3 +308,29 @@ docker compose -f docker-compose.yml -f docker-compose.live-docker.yml up -d
 The socket is mounted read-only, but Docker socket access can still effectively control the host. Do not expose the Sentinel API to untrusted users when this override is active.
 
 The `Container` GitHub Actions workflow builds the image for every pull request. Merges to `main` also publish `ghcr.io/bgray73/sentinel-lab:latest` and an immutable commit-SHA tag to GitHub Container Registry.
+
+## Stage 13: authentication and role-based access
+
+Sentinel can now enforce identity and permissions supplied by LabOps OIDC or another trusted authentication proxy. Sentinel does not accept passwords and does not trust forwarded identity headers on their own. In proxy mode, every browser request must also contain a private, random `X-Sentinel-Proxy-Secret` header injected by the proxy.
+
+Configure the container with:
+
+```bash
+SENTINEL_AUTH_MODE=proxy
+SENTINEL_AUTH_PROXY_SECRET=replace-with-at-least-32-random-characters
+SENTINEL_AUTH_ADMIN_GROUPS=sentinel-admins
+SENTINEL_AUTH_OPERATOR_GROUPS=sentinel-operators
+SENTINEL_METRICS_TOKEN=replace-with-a-different-32-character-token
+```
+
+The proxy must remove any incoming `X-Forwarded-User`, `X-Forwarded-Name`, `X-Forwarded-Email`, `X-Forwarded-Groups`, and `X-Sentinel-Proxy-Secret` values before inserting trusted replacements. It should send comma-separated group names. Do not publish the Sentinel container port directly in proxy mode; only the authentication proxy should be able to reach it.
+
+| Role | Access |
+| --- | --- |
+| Viewer | Read dashboards, inventory, CMDB, logs, findings, and history |
+| Operator | Viewer access plus run checks, collect telemetry, reconcile discovery, acknowledge incidents, and manage operational maintenance/mappings |
+| Administrator | Full access, including monitor, alert, test, retention, and CMDB configuration |
+
+Users in `SENTINEL_AUTH_ADMIN_GROUPS` become administrators, users in `SENTINEL_AUTH_OPERATOR_GROUPS` become operators, and every other authenticated user is a viewer. The UI displays the resolved identity and role; the API independently enforces the same permissions. `GET /api/session` returns the current session without exposing proxy secrets.
+
+`GET /api/health` remains unauthenticated for container health checks. In proxy mode, Prometheus can call `GET /metrics` with `Authorization: Bearer <SENTINEL_METRICS_TOKEN>`. The LabOps snapshot continues to use its separate `LABOPS_EXPORT_TOKEN`. Use different random values for all three tokens.
