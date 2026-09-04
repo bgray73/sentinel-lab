@@ -119,3 +119,5 @@ export type LogRange='15m'|'1h'|'6h'|'24h'|'7d';
 export type LogEntry={id:string;timestamp:string;level:LogLevel;message:string;source:string;service:string;ciId:string;host:string;labels:Record<string,string>;raw:string};
 export type LogSearchResult={mode:'simulation'|'live';query:string;range:LogRange;start:string;end:string;entries:LogEntry[];summary:{total:number;errors:number;warnings:number;sources:number;services:number}};
 export type IncidentLogCorrelation=LogSearchResult&{incident:Incident;relatedConfigurationItems:string[]};
+export type SentinelRole = 'viewer' | 'operator' | 'admin';
+export interface Session { mode: 'disabled' | 'proxy'; user: { subject: string; name: string; email?: string; groups: string[]; role: SentinelRole; service?: boolean }; permissions: { operate: boolean; administer: boolean } }

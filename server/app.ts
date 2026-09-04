@@ -17,8 +17,9 @@ import type { LokiService } from './logging/service.js';
 import type { MonitoringService } from './monitoring/service.js';
 import type { HardwareService } from './hardware/service.js';
 import type { Run, TestResult } from './types.js';
+import { authConfigFromEnvironment, authenticate, authorize, session, type AuthConfig, type Identity } from './auth.js';
 
-export function createApp(store: Store, monitoring?: MonitoringService, telemetry?: TelemetryService, cmdb?: CmdbService, logs?: LokiService, hardware?: HardwareService, log: StructuredLogger = defaultLogger) {
+export function createApp(store: Store, monitoring?: MonitoringService, telemetry?: TelemetryService, cmdb?: CmdbService, logs?: LokiService, hardware?: HardwareService, log: StructuredLogger = defaultLogger, auth: AuthConfig = authConfigFromEnvironment()) {
   const app = express();
   app.disable('x-powered-by');
   app.use((req, res, next) => {
@@ -35,6 +36,9 @@ export function createApp(store: Store, monitoring?: MonitoringService, telemetr
   app.use(requestLogger(log));
 
   app.get('/api/health', (_req, res) => res.json({ status: 'ok', service: 'sentinel-api' }));
+  app.use(authenticate(auth, log));
+  app.use(authorize(log));
+  app.get('/api/session', (_req, res) => res.json(session(auth, res.locals.identity as Identity)));
   app.get('/api/monitors', async (_req, res) => {
     if (!monitoring) return res.status(503).json({ error: 'Monitoring service is not available' });
     await monitoring.ready; return res.json({ mode: monitoring.mode(), monitors: monitoring.list() });
