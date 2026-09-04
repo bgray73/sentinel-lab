@@ -1,0 +1,11 @@
+export type CiClass='node'|'vm'|'lxc'|'storage'|'docker_host'|'application'|'container'|'service'|'database'|'network'|'other';
+export type CiSource='proxmox'|'docker'|'monitoring'|'manual';
+export type CiLifecycle='active'|'stale'|'retired';
+export type CiCriticality='low'|'medium'|'high'|'critical';
+export type ConfigurationItem={id:string;externalId:string;class:CiClass;name:string;source:CiSource;lifecycle:CiLifecycle;status:string;environment:string;owner:string;criticality:CiCriticality;tags:string[];attributes:Record<string,string|number|boolean|null>;firstSeenAt:string;lastSeenAt:string;updatedAt:string;version:number};
+export type RelationshipType='contains'|'hosts'|'runs_on'|'depends_on'|'monitored_by'|'connected_to';
+export type CmdbRelationship={id:string;fromId:string;toId:string;type:RelationshipType;source:CiSource;createdAt:string};
+export type CmdbChange={id:string;ciId:string;action:'discovery_created'|'discovery_updated'|'manual_created'|'manual_updated'|'lifecycle_changed'|'relationship_created';fields:string[];actor:string;changedAt:string};
+export type CmdbData={items:ConfigurationItem[];relationships:CmdbRelationship[];changes:CmdbChange[];lastReconciledAt?:string};
+export type DiscoveredCi={externalId:string;class:CiClass;name:string;source:Exclude<CiSource,'manual'>;status:string;attributes:ConfigurationItem['attributes']};
+export type DiscoveredRelationship={fromExternalId:string;fromSource:CiSource;toExternalId:string;toSource:CiSource;type:RelationshipType;source:CiSource};

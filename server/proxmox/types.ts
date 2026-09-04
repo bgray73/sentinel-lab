@@ -16,6 +16,8 @@ export type ProxmoxResource = {
   memoryTotalBytes?: number;
   diskUsedBytes?: number;
   diskTotalBytes?: number;
+  networkRxBytes?: number;
+  networkTxBytes?: number;
 };
 
 export type ProxmoxInventory = {
@@ -47,5 +49,6 @@ export type ProxmoxApiResource = {
   maxmem?: number;
   disk?: number;
   maxdisk?: number;
+  netin?: number;
+  netout?: number;
 };
-

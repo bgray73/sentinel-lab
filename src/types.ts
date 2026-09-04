@@ -93,3 +93,17 @@ export type MetricPoint={timestamp:string;checks:number;failures:number;availabi
 export type MetricSummary={checks:number;failures:number;availabilityPercent:number|null;avgLatencyMs:number|null;p95LatencyMs:number|null};
 export type MonitorMetricSeries={monitorId:string;name:string;protocol:MonitorProtocol;currentStatus:'up'|'down'|'pending';summary:MetricSummary;points:MetricPoint[]};
 export type MetricsSnapshot={range:MetricRange;start:string;end:string;bucketSeconds:number;retainedResults:number;retention:RetentionPolicy;overall:MetricSummary&{activeIncidents:number;enabledRules:number};series:MonitorMetricSeries[]};
+
+export type TelemetryPoint={timestamp:string;samples:number;cpuPercent:number|null;memoryPercent:number|null;diskPercent:number|null;networkRxBytesPerSecond:number|null;networkTxBytesPerSecond:number|null;diskReadBytesPerSecond:number|null;diskWriteBytesPerSecond:number|null};
+export type TelemetrySample={id:string;resourceId:string;name:string;type:'node'|'vm'|'lxc'|'container';source:'proxmox'|'docker';state:string;cpuPercent:number;memoryPercent:number|null;diskPercent:number|null;networkRxBytesPerSecond:number|null;networkTxBytesPerSecond:number|null;diskReadBytesPerSecond:number|null;diskWriteBytesPerSecond:number|null;collectedAt:string};
+export type TelemetrySeries={resourceId:string;name:string;type:TelemetrySample['type'];source:TelemetrySample['source'];state:string;latest:TelemetrySample;points:TelemetryPoint[]};
+export type TelemetrySnapshot={range:MetricRange;start:string;end:string;bucketSeconds:number;summary:{resources:number;proxmoxResources:number;containers:number;warningResources:number;sampleCount:number};series:TelemetrySeries[]};
+
+export type CiClass='node'|'vm'|'lxc'|'storage'|'docker_host'|'application'|'container'|'service'|'database'|'network'|'other';
+export type CiLifecycle='active'|'stale'|'retired';
+export type CiCriticality='low'|'medium'|'high'|'critical';
+export type ConfigurationItem={id:string;externalId:string;class:CiClass;name:string;source:'proxmox'|'docker'|'monitoring'|'manual';lifecycle:CiLifecycle;status:string;environment:string;owner:string;criticality:CiCriticality;tags:string[];attributes:Record<string,string|number|boolean|null>;firstSeenAt:string;lastSeenAt:string;updatedAt:string;version:number};
+export type CmdbRelationship={id:string;fromId:string;toId:string;type:'contains'|'hosts'|'runs_on'|'depends_on'|'monitored_by'|'connected_to';source:ConfigurationItem['source'];createdAt:string};
+export type CmdbChange={id:string;ciId:string;action:string;fields:string[];actor:string;changedAt:string};
+export type CmdbStatus={mode:'simulation'|'live';intervalSeconds:number;lastReconciledAt:string|null;lastError:string;items:number;relationships:number;stale:number};
+export type CmdbSnapshot={status:CmdbStatus;items:ConfigurationItem[];relationships:CmdbRelationship[];changes:CmdbChange[]};

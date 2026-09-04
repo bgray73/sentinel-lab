@@ -152,6 +152,40 @@ The export includes monitor status, latest latency, health score, uptime, active
 - `PUT /api/metrics/settings` updates `days` and `maxResults`, then applies pruning.
 - `GET /metrics` returns Prometheus text exposition format.
 
+## Stage 8: Infrastructure telemetry and CMDB
+
+The **Performance** page collects CPU, memory, disk-capacity, network-throughput, and block-I/O history for Proxmox nodes, VMs, LXC containers, and Docker containers. Simulation is the safe default. Live collection uses the existing read-only Proxmox and Docker connections:
+
+```bash
+export SENTINEL_REAL_TELEMETRY=true
+export SENTINEL_TELEMETRY_INTERVAL_SECONDS=60
+export SENTINEL_TELEMETRY_FILE=/var/lib/sentinel/telemetry.json
+```
+
+The **CMDB** page provides ServiceNow-style configuration-management fundamentals: automatically discovered and manually created configuration items, stable external identifiers, ownership, environment, criticality, tags, lifecycle, relationships, reconciliation, and an audit trail. Missing discovered resources are marked `stale` rather than deleted, and discovery updates do not overwrite operator-maintained metadata.
+
+```bash
+export SENTINEL_REAL_CMDB=true
+export SENTINEL_CMDB_DISCOVERY_INTERVAL_SECONDS=300
+export SENTINEL_CMDB_FILE=/var/lib/sentinel/cmdb.json
+```
+
+### Stage 8 endpoints
+
+- `GET /api/infrastructure/metrics?range=24h` returns bucketed resource history.
+- `POST /api/infrastructure/metrics/collect` collects one sample immediately.
+- `GET /api/cmdb/snapshot` exports CMDB status, items, relationships, and recent changes.
+- `GET /api/cmdb/items` supports `class`, `lifecycle`, and `search` filters.
+- `POST /api/cmdb/items` and `PATCH /api/cmdb/items/:id` maintain manual metadata.
+- `GET /api/cmdb/relationships` and `POST /api/cmdb/relationships` expose the relationship map.
+- `GET /api/cmdb/changes` returns the audit history.
+- `POST /api/cmdb/reconcile` runs discovery and reconciliation immediately.
+- `GET /metrics` also exports the latest infrastructure gauges.
+
+### LabOps / Dashboard_Test integration direction
+
+Do not merge the repositories wholesale yet. LabOps already has OIDC, PostgreSQL, device inventory, incidents, maintenance, reports, and webhooks, so it is the stronger long-term control plane and authoritative CMDB. SentinelLab should initially remain the specialized Proxmox/Docker discovery and telemetry provider, integrated through the versioned CMDB snapshot and metrics APIs. Once this boundary is proven, Sentinel modules can be moved into the LabOps monorepo without carrying duplicate inventory and incident implementations forward.
+
 ## Verify
 
 ```bash
