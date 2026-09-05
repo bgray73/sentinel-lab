@@ -27,3 +27,50 @@ Secret-file support covers the webhook URLs, SMTP URL, ServiceNow password/token
 The primary recovery point remains local for fast restore. Set `SENTINEL_BACKUP_REPLICA_DIR` to a separately mounted NAS, removable disk, or protected filesystem. After every primary backup passes SHA-256 verification, Sentinel copies it to a temporary replica directory, atomically publishes it, and verifies every replicated checksum.
 
 Use `docker-compose.backup-target.yml.example` as an additional Compose file. The Recovery page distinguishes primary verification from replica verification and can retry a failed or missing copy. A replica protects against host loss only when the underlying storage is physically or administratively separate.
+
+## ServiceNow CMDB and change management
+
+Stage 18 sends discovered Sentinel configuration items through the ServiceNow Identification and Reconciliation Engine (IRE). This preserves ServiceNow identification and reconciliation rules instead of writing directly to CMDB tables. Sentinel uses `source:externalId` as the stable native key, records returned `sys_id` mappings locally, and submits supported CI relationships when both endpoints are in the same batch.
+
+Start with the safe defaults:
+
+```dotenv
+SENTINEL_REAL_SERVICENOW_CMDB=false
+SENTINEL_SERVICENOW_CMDB_SOURCE=Other Automated
+SENTINEL_SERVICENOW_CMDB_FEED=SentinelLab
+SENTINEL_SERVICENOW_CMDB_INTERVAL_MINUTES=60
+SENTINEL_SERVICENOW_AUTO_CHANGE=false
+```
+
+Open **Automation** and select **Preview sync**. The preview records the proposed scope and class mappings locally but does not contact ServiceNow. Check CI counts and relationships, then confirm these prerequisites in ServiceNow:
+
+1. `SENTINEL_SERVICENOW_CMDB_SOURCE` is an allowed `discovery_source` choice. Use an organization-specific value when available.
+2. The integration account can call the Identification and Reconciliation API and write the target CMDB classes.
+3. Relationship types used by Sentinel exist in `cmdb_rel_type`: Contains, Hosts, Runs on, Depends on, Monitors, and Connects to.
+4. The account can create `change_request` records if planned-change automation will be used.
+
+Sentinel maps infrastructure to standard ServiceNow classes:
+
+| Sentinel CI | ServiceNow class |
+| --- | --- |
+| Proxmox node, Docker host, physical server | `cmdb_ci_server` |
+| Virtual machine | `cmdb_ci_vm_instance` |
+| LXC or Docker container | `cmdb_ci_container` |
+| Application | `cmdb_ci_appl` |
+| Service | `cmdb_ci_service` |
+| Database | `cmdb_ci_database` |
+| Switch / router | `cmdb_ci_ip_switch` / `cmdb_ci_ip_router` |
+| Storage | `cmdb_ci_storage_device` |
+| Other, UPS, or PDU | `cmdb_ci` |
+
+After validating the preview and ServiceNow rules, set `SENTINEL_REAL_SERVICENOW_CMDB=true` and restart Sentinel. An operator can run an immediate sync; Sentinel also runs it at the configured interval. Batches contain at most 500 CIs. Relationships that cross a batch boundary are reported as deferred so they are visible rather than silently lost.
+
+The **Planned change** action creates a normal ServiceNow change linked to the selected CI. Live change creation requires that CI to have a successful `sys_id` mapping. Leave `SENTINEL_SERVICENOW_AUTO_CHANGE=false` until the workflow is accepted; enabling it creates a corresponding change when an operator schedules a hardware maintenance window. A local maintenance window still succeeds if external change creation fails, and the API reports the automation error.
+
+The state file `/var/lib/sentinel/servicenow-cmdb.json` retains mappings, sync runs, and change records with owner-only permissions and is included in Sentinel recovery points. Prometheus exposes mapping count, latest-sync success, failed-item count, and retained changes by status.
+
+### API endpoints
+
+- `GET /api/integrations/servicenow/cmdb` returns mode, settings without secrets, mappings, sync history, and changes.
+- `POST /api/integrations/servicenow/cmdb/sync` starts a preview or live IRE synchronization. Operator role required.
+- `POST /api/integrations/servicenow/changes` creates a simulated or live planned change. Operator role required.

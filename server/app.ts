@@ -21,8 +21,9 @@ import { authConfigFromEnvironment, authenticate, authorize, session, type AuthC
 import { SecurityAuditService } from './security/service.js';
 import type { BackupService } from './backup/service.js';
 import { CollectorAuthError, CollectorReplayError, type CollectorService } from './collector/service.js';
+import type { ServiceNowCmdbService } from './integrations/servicenow.js';
 
-export function createApp(store: Store, monitoring?: MonitoringService, telemetry?: TelemetryService, cmdb?: CmdbService, logs?: LokiService, hardware?: HardwareService, log: StructuredLogger = defaultLogger, auth: AuthConfig = authConfigFromEnvironment(), security: SecurityAuditService = new SecurityAuditService(), backups?: BackupService, collectors?: CollectorService) {
+export function createApp(store: Store, monitoring?: MonitoringService, telemetry?: TelemetryService, cmdb?: CmdbService, logs?: LokiService, hardware?: HardwareService, log: StructuredLogger = defaultLogger, auth: AuthConfig = authConfigFromEnvironment(), security: SecurityAuditService = new SecurityAuditService(), backups?: BackupService, collectors?: CollectorService, serviceNow?: ServiceNowCmdbService) {
   const app = express();
   app.disable('x-powered-by');
   app.use((req, res, next) => {
@@ -94,7 +95,7 @@ export function createApp(store: Store, monitoring?: MonitoringService, telemetr
   });
   app.get('/metrics',async(_req,res)=>{
     if(!monitoring)return res.status(503).type('text/plain').send('Monitoring service is not available\n');
-    await monitoring.ready;if(telemetry)await telemetry.ready;if(hardware)await hardware.ready;res.set('Content-Type','text/plain; version=0.0.4; charset=utf-8');return res.send(`${monitoring.prometheus()}${telemetry?.prometheus()||''}${hardware?.prometheus()||''}${await security.prometheus()}${backups?await backups.prometheus():''}${collectors?await collectors.prometheus():''}`);
+    await monitoring.ready;if(telemetry)await telemetry.ready;if(hardware)await hardware.ready;res.set('Content-Type','text/plain; version=0.0.4; charset=utf-8');return res.send(`${monitoring.prometheus()}${telemetry?.prometheus()||''}${hardware?.prometheus()||''}${await security.prometheus()}${backups?await backups.prometheus():''}${collectors?await collectors.prometheus():''}${serviceNow?await serviceNow.prometheus():''}`);
   });
   app.get('/api/infrastructure/metrics/status',async(_req,res)=>{if(!telemetry)return res.status(503).json({error:'Telemetry service is not available'});await telemetry.ready;return res.json(telemetry.status())});
   app.get('/api/infrastructure/metrics',async(req,res)=>{if(!telemetry)return res.status(503).json({error:'Telemetry service is not available'});try{await telemetry.ready;return res.json(telemetry.metrics(typeof req.query.range==='string'?req.query.range:'24h'))}catch(error){return res.status(400).json({error:error instanceof Error?error.message:'Invalid telemetry range'})}});
@@ -167,7 +168,7 @@ export function createApp(store: Store, monitoring?: MonitoringService, telemetr
   });
   app.post('/api/hardware/maintenance', async (req, res) => {
     if (!hardware) return res.status(503).json({ error: 'Hardware service is not available' });
-    try { await hardware.ready; return res.status(201).json(await hardware.addMaintenance(req.body || {})); }
+    try { await hardware.ready; const window=await hardware.addMaintenance(req.body || {});let change=null;let automationError='';if(serviceNow?.autoChanges)try{change=await serviceNow.createMaintenanceChange(window)}catch(error){automationError=error instanceof Error?error.message:'Change automation failed'}return res.status(201).json({window,change,automationError}); }
     catch (error) { return res.status(400).json({ error: error instanceof Error ? error.message : 'Invalid maintenance window' }); }
   });
   app.delete('/api/hardware/maintenance/:id', async (req, res) => {
@@ -243,6 +244,9 @@ export function createApp(store: Store, monitoring?: MonitoringService, telemetr
     if (!monitoring) return res.status(503).json({ error: 'Monitoring service is not available' });
     await monitoring.ready; return res.json(monitoring.automation());
   });
+  app.get('/api/integrations/servicenow/cmdb', async (_req,res)=>{if(!serviceNow)return res.status(503).json({error:'ServiceNow CMDB integration is not available'});await serviceNow.ready;return res.json(serviceNow.snapshot())});
+  app.post('/api/integrations/servicenow/cmdb/sync',async(_req,res)=>{if(!serviceNow)return res.status(503).json({error:'ServiceNow CMDB integration is not available'});try{await serviceNow.ready;return res.json(await serviceNow.sync())}catch(error){return res.status(502).json({error:error instanceof Error?error.message:'ServiceNow CMDB sync failed'})}});
+  app.post('/api/integrations/servicenow/changes',async(req,res)=>{if(!serviceNow)return res.status(503).json({error:'ServiceNow CMDB integration is not available'});try{await serviceNow.ready;return res.status(201).json(await serviceNow.createChange(req.body||{}))}catch(error){return res.status(400).json({error:error instanceof Error?error.message:'ServiceNow change creation failed'})}});
   app.post('/api/notifications/:id/retry', async (req, res) => {
     if (!monitoring) return res.status(503).json({ error: 'Monitoring service is not available' });
     try { await monitoring.ready; return res.json(await monitoring.retryDelivery(req.params.id)); }
