@@ -44,6 +44,12 @@ export type ProxmoxHaHealth={id:string;kind:'node'|'service';node:string;state:s
 export type ProxmoxReplicationHealth={id:string;source:string;target:string;schedule:string;enabled:boolean};
 export type ProxmoxOperationsSnapshot={mode:'simulation'|'live';collectedAt:string;clusterName:string;health:HealthStatus;quorum:{quorate:boolean|null;nodesOnline:number;nodesTotal:number;expectedVotes:number|null;totalVotes:number|null};storage:ProxmoxStorageHealth[];recentTasks:ProxmoxTaskHealth[];backup:{lastSuccessfulAt:string|null;ageHours:number|null;successful24h:number;failed24h:number;health:HealthStatus};ha:ProxmoxHaHealth[];replication:ProxmoxReplicationHealth[];findings:ProxmoxOperationalFinding[];collectionErrors:string[];summary:{warnings:number;critical:number;storagePressure:number;failedTasks24h:number;haProblems:number;replicationJobs:number}};
 export type ProxmoxOperationsResponse={status:{mode:'simulation'|'live';intervalSeconds:number;retentionDays:number;backupWarningHours:number;backupCriticalHours:number;storageWarningPercent:number;storageCriticalPercent:number;lastCollectedAt:string|null};current:ProxmoxOperationsSnapshot|null;history:ProxmoxOperationsSnapshot[]};
+export type PbsFinding={id:string;category:'datastore'|'snapshot'|'verification'|'task'|'gc'|'collection';severity:'warning'|'critical';title:string;detail:string;resourceId?:string};
+export type PbsDatastore={name:string;usedBytes:number;totalBytes:number;availableBytes:number;usagePercent:number;health:HealthStatus;snapshots:number;groups:number;newestSnapshotAt:string|null;newestAgeHours:number|null;verified:number;unverified:number;verificationFailed:number};
+export type PbsTask={id:string;type:string;workerId:string;user:string;status:string;startedAt:string;endedAt?:string;durationSeconds?:number};
+export type PbsJob={id:string;kind:'sync'|'prune';store:string;schedule:string;enabled:boolean};
+export type PbsHealthSnapshot={mode:'simulation'|'live';collectedAt:string;serverName:string;health:HealthStatus;datastores:PbsDatastore[];recentTasks:PbsTask[];jobs:PbsJob[];findings:PbsFinding[];collectionErrors:string[];summary:{datastores:number;snapshots:number;groups:number;unverified:number;verificationFailed:number;failedTasks24h:number;syncJobs:number;pruneJobs:number;storagePressure:number}};
+export type PbsHealthResponse={status:{mode:'simulation'|'live';configured:boolean;intervalSeconds:number;retentionDays:number;snapshotWarningHours:number;snapshotCriticalHours:number;verificationWarningDays:number;gcWarningDays:number;storageWarningPercent:number;storageCriticalPercent:number;lastCollectedAt:string|null};current:PbsHealthSnapshot|null;history:PbsHealthSnapshot[]};
 
 export type DockerContainer = {
   id: string;
@@ -65,7 +71,7 @@ export type DockerInventory = {
   containers: DockerContainer[];
   summary: { total: number; running: number; stopped: number; healthy: number; unhealthy: number; composeProjects: number };
 };
-export type ConnectionStatus = { proxmox: { configured: boolean }; docker: { configured: boolean }; redfish:{configured:boolean;targets:number}; snmp:{configured:boolean;targets:number};collectors:{configured:boolean;targets:number;online:number} };
+export type ConnectionStatus = { proxmox: { configured: boolean }; pbs:{configured:boolean}; docker: { configured: boolean }; redfish:{configured:boolean;targets:number}; snmp:{configured:boolean;targets:number};collectors:{configured:boolean;targets:number;online:number} };
 export type HardwareComponent={id:string;name:string;type:string;health:HealthStatus;value?:number;unit?:string;detail?:string};
 export type HardwareDevice={id:string;externalId:string;name:string;source:'redfish'|'snmp';category:'physical_server'|'switch'|'router'|'ups'|'pdu'|'storage_appliance'|'other';health:HealthStatus;status:string;manufacturer?:string;model?:string;serialNumber?:string;firmwareVersion?:string;managementAddress:string;metrics:Record<string,number|undefined>;components:HardwareComponent[];attributes:Record<string,string|number|boolean|null>;collectedAt:string};
 export type HardwareInventory={mode:'simulation'|'live';collectedAt:string;devices:HardwareDevice[];summary:{devices:number;servers:number;networkDevices:number;powerDevices:number;healthy:number;warnings:number;critical:number;components:number}};

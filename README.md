@@ -420,3 +420,13 @@ Sentinel collects every five minutes by default and retains 30 days of snapshots
 The existing Proxmox API token is reused with read-only access. Without credentials, the page uses safe simulated data. Configure the backup-age and storage thresholds before live rollout, and prefer a secret file for the token. The persisted operations history is included in recovery points.
 
 New endpoints are `GET /api/proxmox/operations` and operator-only `POST /api/proxmox/operations/collect`. Prometheus exports overall health, quorum, failed-task count, backup age, and per-storage utilization. See `deploy/sentinel/PROXMOX-OPERATIONS.md` for permissions, settings, and alert examples.
+
+## Stage 20: Proxmox Backup Server recoverability
+
+The **Backup server** page verifies the other half of the backup path directly against Proxmox Backup Server. It monitors datastore capacity, newest snapshot age, snapshot groups, verification coverage and failures, failed tasks, garbage-collection recency, plus configured sync and prune jobs. This separates “the PVE backup task completed” from “a usable recovery point exists on healthy storage.”
+
+The PBS datastore-usage call is required. Snapshot, task, sync, and prune calls fail independently and appear as collection gaps, preserving the health information Sentinel can still read. Collection runs every 15 minutes by default, retains 30 days of history, and serializes scheduled and manual requests. Without PBS credentials, the dashboard uses clearly labeled simulated data.
+
+Configure a dedicated audit-only PBS API token and prefer `PBS_TOKEN_SECRET_FILE` over a direct secret. Sentinel requires HTTPS, stores its history with owner-only permissions, and includes that history in recovery points. It never downloads backup data or starts destructive PBS operations.
+
+New endpoints are `GET /api/pbs/health` and operator-only `POST /api/pbs/health/collect`. Prometheus exports overall PBS health, snapshot and verification totals, failed tasks, datastore utilization, and backup age. See `deploy/sentinel/PBS.md` for the least-privilege ACL model, settings, and rollout checklist.

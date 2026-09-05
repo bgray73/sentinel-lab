@@ -41,6 +41,7 @@ describe('authentication and authorization', () => {
     const operator = proxyHeaders('operator', 'operators');
     expect((await fetch(`${base}/api/runs`, { method: 'POST', headers: { ...operator, 'content-type': 'application/json' }, body: '{"simulate":true}' })).status).toBe(200);
     expect((await fetch(`${base}/api/proxmox/operations/collect`, { method: 'POST', headers: operator })).status).toBe(503);
+    expect((await fetch(`${base}/api/pbs/health/collect`, { method: 'POST', headers: operator })).status).toBe(503);
     expect((await fetch(`${base}/api/tests`, { method: 'POST', headers: { ...operator, 'content-type': 'application/json' }, body: '{}' })).status).toBe(403);
     const admin = proxyHeaders('admin', 'admins');
     const response = await fetch(`${base}/api/tests`, { method: 'POST', headers: { ...admin, 'content-type': 'application/json' }, body: JSON.stringify({ name: 'Authorized check', kind: 'api', target: 'https://example.test', critical: false, timeoutMs: 1000 }) });
