@@ -410,3 +410,13 @@ Operators can create a planned ServiceNow change linked to a synchronized CI. Op
 Set `SENTINEL_REAL_SERVICENOW_CMDB=true` only after validating a preview, the ServiceNow discovery-source choice, target classes, relationship types, and the integration account's permissions. Keep `SENTINEL_SERVICENOW_AUTO_CHANGE=false` until the change workflow has been accepted. See `deploy/sentinel/INTEGRATIONS.md` for the complete setup checklist and class map.
 
 New endpoints are `GET /api/integrations/servicenow/cmdb`, `POST /api/integrations/servicenow/cmdb/sync`, and `POST /api/integrations/servicenow/changes`. `/metrics` also exports CMDB mapping, sync-health, failed-item, and change-status gauges.
+
+## Stage 19: Proxmox cluster operations health
+
+The **Cluster health** page now monitors Proxmox conditions that workload inventory alone cannot detect: cluster quorum, offline members, storage pressure, failed tasks, backup freshness, HA resource state, and configured replication jobs. It provides an overall health verdict, actionable findings, storage utilization bars, recent task results, and HA/replication summaries.
+
+Sentinel collects every five minutes by default and retains 30 days of snapshots. Quorum and storage calls are required; task, HA, and replication calls fail independently so a permission or version difference cannot discard the rest of the health snapshot. Overlapping scheduled and manual collections share one request.
+
+The existing Proxmox API token is reused with read-only access. Without credentials, the page uses safe simulated data. Configure the backup-age and storage thresholds before live rollout, and prefer a secret file for the token. The persisted operations history is included in recovery points.
+
+New endpoints are `GET /api/proxmox/operations` and operator-only `POST /api/proxmox/operations/collect`. Prometheus exports overall health, quorum, failed-task count, backup age, and per-storage utilization. See `deploy/sentinel/PROXMOX-OPERATIONS.md` for permissions, settings, and alert examples.

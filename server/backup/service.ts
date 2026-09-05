@@ -13,6 +13,7 @@ const fileSources = (env: NodeJS.ProcessEnv) => [
   ['security-audit.json', env.SENTINEL_AUTH_AUDIT_FILE || resolve('.sentinel/security-audit.json')]
   ,['collectors.json', env.SENTINEL_COLLECTOR_FILE || resolve('.sentinel/collectors.json')]
   ,['servicenow-cmdb.json', env.SENTINEL_SERVICENOW_CMDB_FILE || resolve('.sentinel/servicenow-cmdb.json')]
+  ,['proxmox-operations.json', env.SENTINEL_PROXMOX_OPERATIONS_FILE || resolve('.sentinel/proxmox-operations.json')]
 ] as const;
 
 export class BackupService {

@@ -22,8 +22,9 @@ import { SecurityAuditService } from './security/service.js';
 import type { BackupService } from './backup/service.js';
 import { CollectorAuthError, CollectorReplayError, type CollectorService } from './collector/service.js';
 import type { ServiceNowCmdbService } from './integrations/servicenow.js';
+import type { ProxmoxOperationsService } from './proxmox/operations.js';
 
-export function createApp(store: Store, monitoring?: MonitoringService, telemetry?: TelemetryService, cmdb?: CmdbService, logs?: LokiService, hardware?: HardwareService, log: StructuredLogger = defaultLogger, auth: AuthConfig = authConfigFromEnvironment(), security: SecurityAuditService = new SecurityAuditService(), backups?: BackupService, collectors?: CollectorService, serviceNow?: ServiceNowCmdbService) {
+export function createApp(store: Store, monitoring?: MonitoringService, telemetry?: TelemetryService, cmdb?: CmdbService, logs?: LokiService, hardware?: HardwareService, log: StructuredLogger = defaultLogger, auth: AuthConfig = authConfigFromEnvironment(), security: SecurityAuditService = new SecurityAuditService(), backups?: BackupService, collectors?: CollectorService, serviceNow?: ServiceNowCmdbService, proxmoxOperations?: ProxmoxOperationsService) {
   const app = express();
   app.disable('x-powered-by');
   app.use((req, res, next) => {
@@ -95,9 +96,11 @@ export function createApp(store: Store, monitoring?: MonitoringService, telemetr
   });
   app.get('/metrics',async(_req,res)=>{
     if(!monitoring)return res.status(503).type('text/plain').send('Monitoring service is not available\n');
-    await monitoring.ready;if(telemetry)await telemetry.ready;if(hardware)await hardware.ready;res.set('Content-Type','text/plain; version=0.0.4; charset=utf-8');return res.send(`${monitoring.prometheus()}${telemetry?.prometheus()||''}${hardware?.prometheus()||''}${await security.prometheus()}${backups?await backups.prometheus():''}${collectors?await collectors.prometheus():''}${serviceNow?await serviceNow.prometheus():''}`);
+    await monitoring.ready;if(telemetry)await telemetry.ready;if(hardware)await hardware.ready;res.set('Content-Type','text/plain; version=0.0.4; charset=utf-8');return res.send(`${monitoring.prometheus()}${telemetry?.prometheus()||''}${hardware?.prometheus()||''}${await security.prometheus()}${backups?await backups.prometheus():''}${collectors?await collectors.prometheus():''}${serviceNow?await serviceNow.prometheus():''}${proxmoxOperations?await proxmoxOperations.prometheus():''}`);
   });
   app.get('/api/infrastructure/metrics/status',async(_req,res)=>{if(!telemetry)return res.status(503).json({error:'Telemetry service is not available'});await telemetry.ready;return res.json(telemetry.status())});
+  app.get('/api/proxmox/operations',async(_req,res)=>{if(!proxmoxOperations)return res.status(503).json({error:'Proxmox operations service is not available'});await proxmoxOperations.ready;return res.json(proxmoxOperations.snapshot())});
+  app.post('/api/proxmox/operations/collect',async(_req,res)=>{if(!proxmoxOperations)return res.status(503).json({error:'Proxmox operations service is not available'});try{await proxmoxOperations.ready;return res.json(await proxmoxOperations.collect())}catch(error){return res.status(502).json({error:error instanceof Error?error.message:'Proxmox operations collection failed'})}});
   app.get('/api/infrastructure/metrics',async(req,res)=>{if(!telemetry)return res.status(503).json({error:'Telemetry service is not available'});try{await telemetry.ready;return res.json(telemetry.metrics(typeof req.query.range==='string'?req.query.range:'24h'))}catch(error){return res.status(400).json({error:error instanceof Error?error.message:'Invalid telemetry range'})}});
   app.post('/api/infrastructure/metrics/collect',async(_req,res)=>{if(!telemetry)return res.status(503).json({error:'Telemetry service is not available'});try{await telemetry.ready;return res.json(await telemetry.collect())}catch(error){return res.status(502).json({error:error instanceof Error?error.message:'Telemetry collection failed'})}});
   app.get('/api/cmdb/status', async (_req, res) => {
