@@ -446,3 +446,11 @@ The **Recovery** workspace can now test a designated VM or LXC backup through a 
 This capability uses defense in depth. It remains simulated unless `SENTINEL_REAL_GUEST_DRILLS=true`, all node/storage/source settings are present, and separate `PVE_DRILL_TOKEN_*` credentials are configured. Live runs are administrator-only, manual-only, require an exact confirmation phrase, check VMID availability twice, serialize overlapping requests, and always attempt cleanup after a post-restore failure. A failed cleanup remains visible as a critical operational action and a Prometheus signal.
 
 Use a dedicated non-production drill node, scratch storage, a small canary workload, and a custom scoped Proxmox role. Never give the monitoring token restore/delete permissions. Administrator endpoints are `GET /api/recovery/guest-drills` and `POST /api/recovery/guest-drills`. See `deploy/sentinel/RECOVERY.md` for the rollout and first-run checklist.
+
+## Stage 23: disaster-recovery readiness policy
+
+The **Recovery** workspace now calculates one disaster-recovery readiness score from the controls delivered across the previous recovery stages. Six evidence checks cover recovery-point age against the configured RPO, checksum verification, off-host replication, Sentinel restore-drill age, isolated Proxmox guest-drill age and cleanup state, and live PBS health.
+
+Fresh verified backups and a recent successful Sentinel restore drill are required by default. Replica, guest-drill, and live PBS evidence begin as optional so existing installations can adopt the scorecard without falsely claiming those integrations are configured. Each can be promoted to a required control independently through environment settings. Missing required evidence produces **not ready**; degraded available evidence produces **at risk**; satisfied policy produces **ready**.
+
+The administrator-only `GET /api/recovery/readiness` endpoint returns the score, policy, status, and plain-language evidence for every check. Prometheus exports the overall score and state plus a labeled series for each check, making the same policy suitable for Grafana alerts. See `deploy/sentinel/RECOVERY.md` for policy settings and a recommended rollout sequence.

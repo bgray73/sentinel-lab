@@ -15,6 +15,7 @@ import { ProxmoxOperationsService } from './proxmox/operations.js';
 import { PbsHealthService } from './pbs/service.js';
 import { RecoveryDrillService } from './recovery/drills.js';
 import { GuestRecoveryDrillService } from './recovery/guest-drills.js';
+import { RecoveryReadinessService } from './recovery/readiness.js';
 
 const port = Number(process.env.PORT || 4100);
 const store = new Store(process.env.DATABASE_PATH || resolve('data/sentinel.db'));
@@ -31,4 +32,5 @@ const security = new SecurityAuditService();
 const backups = new BackupService(store);
 const recoveryDrills = new RecoveryDrillService(backups);
 const guestDrills = new GuestRecoveryDrillService();
-createApp(store, monitoring, telemetry, cmdb, logs, hardware, undefined, undefined, security, backups, collectors, serviceNow, proxmoxOperations, pbsHealth, recoveryDrills, guestDrills).listen(port, '0.0.0.0', () => console.log(JSON.stringify({ timestamp: new Date().toISOString(), level: 'info', service: 'sentinel-api', message: 'api_started', port })));
+const recoveryReadiness = new RecoveryReadinessService(backups, recoveryDrills, guestDrills, pbsHealth);
+createApp(store, monitoring, telemetry, cmdb, logs, hardware, undefined, undefined, security, backups, collectors, serviceNow, proxmoxOperations, pbsHealth, recoveryDrills, guestDrills, recoveryReadiness).listen(port, '0.0.0.0', () => console.log(JSON.stringify({ timestamp: new Date().toISOString(), level: 'info', service: 'sentinel-api', message: 'api_started', port })));
