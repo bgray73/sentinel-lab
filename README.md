@@ -400,3 +400,13 @@ Sensitive settings support Docker-style secret files. Set a direct variable such
 Set `SENTINEL_BACKUP_REPLICA_DIR` to a separately mounted target to copy every verified primary recovery point. Sentinel publishes each replica atomically and verifies the same SHA-256 manifest after copying. The **Recovery** page reports replica coverage and can retry a missing or failed copy; Prometheus exports `sentinel_backups_replicated`.
 
 New endpoints are `GET /api/automation`, `POST /api/notifications/:id/retry`, and `POST /api/backups/:id/replicate`. See `deploy/sentinel/INTEGRATIONS.md` for configuration and the backup-target Compose override.
+
+## Stage 18: ServiceNow CMDB and change automation
+
+The **Automation** workspace now includes a ServiceNow configuration-management bridge. It previews or synchronizes active Sentinel CIs through ServiceNow's Identification and Reconciliation Engine, carries supported relationships, persists stable CI-to-`sys_id` mappings, and reports every sync run. Dry-run mode is the default and never calls ServiceNow.
+
+Operators can create a planned ServiceNow change linked to a synchronized CI. Optional maintenance automation creates the same change when a hardware maintenance window is scheduled. Both features reuse the protected ServiceNow credentials from Stage 17 while retaining separate live-mode controls, so incident delivery does not implicitly enable CMDB writes.
+
+Set `SENTINEL_REAL_SERVICENOW_CMDB=true` only after validating a preview, the ServiceNow discovery-source choice, target classes, relationship types, and the integration account's permissions. Keep `SENTINEL_SERVICENOW_AUTO_CHANGE=false` until the change workflow has been accepted. See `deploy/sentinel/INTEGRATIONS.md` for the complete setup checklist and class map.
+
+New endpoints are `GET /api/integrations/servicenow/cmdb`, `POST /api/integrations/servicenow/cmdb/sync`, and `POST /api/integrations/servicenow/changes`. `/metrics` also exports CMDB mapping, sync-health, failed-item, and change-status gauges.
