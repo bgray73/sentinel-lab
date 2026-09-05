@@ -66,6 +66,25 @@ Start with a tiny disposable canary whose backup contains no secrets that should
 
 Administrator-only endpoints are `GET /api/recovery/guest-drills` and `POST /api/recovery/guest-drills`. History is stored with owner-only permissions and included in Sentinel recovery points. Prometheus exports the latest drill state and unresolved cleanup count.
 
+## Disaster-recovery readiness policy
+
+Stage 23 combines backup and drill evidence into one policy result. The defaults require a verified recovery point no older than 24 hours and a successful Sentinel restore drill no older than eight days. Replica, guest-drill, and live PBS checks remain visible but optional until the matching requirement is enabled:
+
+```dotenv
+SENTINEL_RECOVERY_RPO_HOURS=24
+SENTINEL_RECOVERY_APP_DRILL_MAX_AGE_DAYS=8
+SENTINEL_RECOVERY_GUEST_DRILL_MAX_AGE_DAYS=30
+SENTINEL_RECOVERY_REQUIRE_REPLICA=false
+SENTINEL_RECOVERY_REQUIRE_GUEST_DRILL=false
+SENTINEL_RECOVERY_REQUIRE_PBS=false
+```
+
+Roll out requirements in order. First establish scheduled verified backups and weekly Sentinel restore drills. Next configure and verify the off-host replica before setting `SENTINEL_RECOVERY_REQUIRE_REPLICA=true`. After the dedicated Proxmox drill environment has completed several clean live runs, require the guest drill. Require PBS last, after live PBS collection is stable and its API token has the documented audit-only access.
+
+The score is weighted to keep the core recovery controls prominent: recovery-point freshness 25, checksum verification 20, Sentinel restore drill 25, replica 10, guest drill 10, and PBS 10. An optional unavailable control is neutral. A warning receives half its weight and produces **at risk**. Failed or missing required evidence produces **not ready**, regardless of the numeric score.
+
+Use `GET /api/recovery/readiness` for the complete evidence response. Prometheus provides `sentinel_recovery_readiness_score`, `sentinel_recovery_readiness_state`, and one `sentinel_recovery_readiness_check` series per control. Alert on `not-ready` immediately and on `at-risk` only after a short hold period so a single transient PBS warning does not create noise.
+
 ## Offline data restore
 
 Never restore while the Sentinel service is running. Replace `<backup-id>` with the exact recovery point shown in the dashboard.
