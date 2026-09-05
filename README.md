@@ -430,3 +430,11 @@ The PBS datastore-usage call is required. Snapshot, task, sync, and prune calls 
 Configure a dedicated audit-only PBS API token and prefer `PBS_TOKEN_SECRET_FILE` over a direct secret. Sentinel requires HTTPS, stores its history with owner-only permissions, and includes that history in recovery points. It never downloads backup data or starts destructive PBS operations.
 
 New endpoints are `GET /api/pbs/health` and operator-only `POST /api/pbs/health/collect`. Prometheus exports overall PBS health, snapshot and verification totals, failed tasks, datastore utilization, and backup age. See `deploy/sentinel/PBS.md` for the least-privilege ACL model, settings, and rollout checklist.
+
+## Stage 21: automated recovery drills
+
+The **Recovery** workspace now proves that a retained Sentinel recovery point can be used. Each drill copies the newest verified recovery point into an isolated temporary workspace, verifies the restored checksums, opens the recovered SQLite database with `integrity_check`, parses every JSON state store, retains step-by-step evidence, and then removes the temporary copy. Live Sentinel data is never replaced or modified.
+
+When an external replica is configured, the default `auto` source exercises that replica first and falls back to primary only when necessary. Administrators can require `replica` mode so an unavailable off-host copy fails the drill. Scheduling is disabled by default; after a successful manual run, enable a seven-day schedule with `SENTINEL_RECOVERY_DRILLS_ENABLED=true`.
+
+The drill engine serializes overlapping requests, retains 180 days of results, records failures instead of hiding them, and includes its history in later recovery points. Administrator-only endpoints are `GET /api/recovery/drills` and `POST /api/recovery/drills`. Prometheus exports the latest drill state, age, and consecutive failures. See `deploy/sentinel/RECOVERY.md` for configuration and the boundary between application drills and future isolated VM boot tests.
