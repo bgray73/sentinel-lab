@@ -438,3 +438,11 @@ The **Recovery** workspace now proves that a retained Sentinel recovery point ca
 When an external replica is configured, the default `auto` source exercises that replica first and falls back to primary only when necessary. Administrators can require `replica` mode so an unavailable off-host copy fails the drill. Scheduling is disabled by default; after a successful manual run, enable a seven-day schedule with `SENTINEL_RECOVERY_DRILLS_ENABLED=true`.
 
 The drill engine serializes overlapping requests, retains 180 days of results, records failures instead of hiding them, and includes its history in later recovery points. Administrator-only endpoints are `GET /api/recovery/drills` and `POST /api/recovery/drills`. Prometheus exports the latest drill state, age, and consecutive failures. See `deploy/sentinel/RECOVERY.md` for configuration and the boundary between application drills and future isolated VM boot tests.
+
+## Stage 22: isolated Proxmox guest recovery
+
+The **Recovery** workspace can now test a designated VM or LXC backup through a complete Proxmox restore lifecycle. Sentinel finds an unused ID inside a reserved drill range, selects the newest matching backup, restores it powered off to allowlisted scratch storage, removes every restored network interface, boots it for a bounded interval, optionally checks the QEMU guest agent, stops it, and deletes the temporary guest and disks.
+
+This capability uses defense in depth. It remains simulated unless `SENTINEL_REAL_GUEST_DRILLS=true`, all node/storage/source settings are present, and separate `PVE_DRILL_TOKEN_*` credentials are configured. Live runs are administrator-only, manual-only, require an exact confirmation phrase, check VMID availability twice, serialize overlapping requests, and always attempt cleanup after a post-restore failure. A failed cleanup remains visible as a critical operational action and a Prometheus signal.
+
+Use a dedicated non-production drill node, scratch storage, a small canary workload, and a custom scoped Proxmox role. Never give the monitoring token restore/delete permissions. Administrator endpoints are `GET /api/recovery/guest-drills` and `POST /api/recovery/guest-drills`. See `deploy/sentinel/RECOVERY.md` for the rollout and first-run checklist.

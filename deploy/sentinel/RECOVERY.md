@@ -29,6 +29,43 @@ The drill proves the Sentinel database and state files can be restored and opene
 
 Drill evidence is administrator-only. `GET /api/recovery/drills` returns status and history, while `POST /api/recovery/drills` runs an immediate drill. Prometheus exports the latest state, age, and consecutive failure count.
 
+## Isolated Proxmox VM and LXC drills
+
+Stage 22 can exercise one designated canary VM or LXC backup through Proxmox VE. Simulation mode is always available and makes no Proxmox write calls. Live mode is manual-only and deliberately requires a separate drill token plus every allowlist value:
+
+```dotenv
+SENTINEL_REAL_GUEST_DRILLS=false
+SENTINEL_GUEST_DRILL_NODE=pve-drill
+SENTINEL_GUEST_DRILL_BACKUP_STORAGE=pbs
+SENTINEL_GUEST_DRILL_TARGET_STORAGE=drill-zfs
+SENTINEL_GUEST_DRILL_SOURCE_TYPE=qemu
+SENTINEL_GUEST_DRILL_SOURCE_VMID=104
+SENTINEL_GUEST_DRILL_VMID_MIN=900000
+SENTINEL_GUEST_DRILL_VMID_MAX=900099
+SENTINEL_GUEST_DRILL_BOOT_SECONDS=30
+PVE_DRILL_TOKEN_ID=sentinel-drill@pve!recovery
+PVE_DRILL_TOKEN_SECRET_FILE=/run/secrets/pve_drill_token
+```
+
+Do not reuse `PVE_TOKEN_ID`; the normal monitoring token should remain read-only. Create a custom drill role instead of granting cluster administrator. It needs audit access to the designated node and PBS-backed storage, space allocation on the scratch storage, guest allocation/configuration, power control, and deletion for temporary guests. Apply it only to the dedicated drill node/storage and test the effective permissions before enabling live mode.
+
+Use a node that is not carrying production HA workloads and a scratch storage target with enough free space for the canary. Reserve the configured VMID range operationally; Sentinel also scans `/cluster/resources` before selecting the ID and checks it again immediately before restore. Do not manually create guests in this range.
+
+A live run performs this fixed sequence:
+
+1. Verify the allowlisted node, storage, and an unused reserved VMID.
+2. Select the newest backup for the configured source VMID and type.
+3. Restore it powered off onto scratch storage.
+4. Read the restored configuration and delete every `netN` interface before boot.
+5. Boot for the configured bounded interval and optionally query the QEMU guest agent.
+6. Stop the guest and delete it with purge and unreferenced-disk cleanup enabled.
+
+The administrator must confirm the operation in the UI, and the API additionally requires the exact phrase returned by its status endpoint. If a step fails after restore, Sentinel attempts stop and deletion in `finally`. A cleanup failure is retained prominently and exported as `sentinel_guest_recovery_cleanup_required`; treat any nonzero value as an immediate manual task before another run.
+
+Start with a tiny disposable canary whose backup contains no secrets that should exist on the drill node. Even though Sentinel removes virtual NICs before boot, guest hooks, passthrough devices, and unusual backup configuration can have side effects. Review the canary configuration and watch the first live run directly in Proxmox.
+
+Administrator-only endpoints are `GET /api/recovery/guest-drills` and `POST /api/recovery/guest-drills`. History is stored with owner-only permissions and included in Sentinel recovery points. Prometheus exports the latest drill state and unresolved cleanup count.
+
 ## Offline data restore
 
 Never restore while the Sentinel service is running. Replace `<backup-id>` with the exact recovery point shown in the dashboard.
