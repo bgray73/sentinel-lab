@@ -15,6 +15,7 @@ const fileSources = (env: NodeJS.ProcessEnv) => [
   ,['servicenow-cmdb.json', env.SENTINEL_SERVICENOW_CMDB_FILE || resolve('.sentinel/servicenow-cmdb.json')]
   ,['proxmox-operations.json', env.SENTINEL_PROXMOX_OPERATIONS_FILE || resolve('.sentinel/proxmox-operations.json')]
   ,['pbs-health.json', env.SENTINEL_PBS_FILE || resolve('.sentinel/pbs-health.json')]
+  ,['recovery-drills.json', env.SENTINEL_RECOVERY_DRILL_FILE || resolve('.sentinel/recovery-drills.json')]
 ] as const;
 
 export class BackupService {

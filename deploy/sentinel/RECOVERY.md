@@ -10,6 +10,25 @@
 
 If the application image fails but data is healthy, set `SENTINEL_IMAGE` back to the recorded image tag and run `docker compose up -d`. A data restore is not needed for an image-only rollback.
 
+## Automated recovery drills
+
+The **Recovery** page can prove a recovery point is readable without changing the running Sentinel installation. A drill selects the newest verified recovery point, restores it into an isolated workspace, verifies the restored SHA-256 manifest, runs SQLite `integrity_check`, parses every JSON state store, records the evidence, and removes the temporary files.
+
+Run one drill manually first. If it passes, enable the weekly schedule:
+
+```dotenv
+SENTINEL_RECOVERY_DRILLS_ENABLED=true
+SENTINEL_RECOVERY_DRILL_INTERVAL_DAYS=7
+SENTINEL_RECOVERY_DRILL_RETENTION_DAYS=180
+SENTINEL_RECOVERY_DRILL_SOURCE=auto
+```
+
+`auto` prefers a verified external replica and falls back to primary storage. Use `replica` when a drill must fail rather than silently test the primary copy if the external target is unavailable. `primary` always exercises local recovery points. Container deployments place the temporary restore workspace under `/var/lib/sentinel/drill-work`; it is removed after every attempt, including failures.
+
+The drill proves the Sentinel database and state files can be restored and opened. It does not replace the offline production restore procedure below, and it does not restore or boot Proxmox guests. Guest recovery tests require a separately isolated network, reserved VM IDs, temporary storage, and explicit delete permissions.
+
+Drill evidence is administrator-only. `GET /api/recovery/drills` returns status and history, while `POST /api/recovery/drills` runs an immediate drill. Prometheus exports the latest state, age, and consecutive failure count.
+
 ## Offline data restore
 
 Never restore while the Sentinel service is running. Replace `<backup-id>` with the exact recovery point shown in the dashboard.
@@ -28,4 +47,4 @@ After startup, verify the container is healthy, sign in, review connection statu
 
 ## Host-loss protection
 
-Backups inside the default named volume protect against bad changes and upgrades, but not against loss of the Docker host or its storage. Copy `docker-compose.backup-target.yml.example`, change its host path to a NAS or separately protected filesystem, and include it as an additional Compose file. Test an offline restore at least quarterly.
+Backups inside the default named volume protect against bad changes and upgrades, but not against loss of the Docker host or its storage. Copy `docker-compose.backup-target.yml.example`, change its host path to a NAS or separately protected filesystem, and include it as an additional Compose file. Keep automated drills enabled and still test the complete offline operator procedure at least quarterly.

@@ -13,6 +13,7 @@ import { ServiceNowCmdbService } from './integrations/servicenow.js';
 import { configFromEnvironment } from './proxmox/client.js';
 import { ProxmoxOperationsService } from './proxmox/operations.js';
 import { PbsHealthService } from './pbs/service.js';
+import { RecoveryDrillService } from './recovery/drills.js';
 
 const port = Number(process.env.PORT || 4100);
 const store = new Store(process.env.DATABASE_PATH || resolve('data/sentinel.db'));
@@ -27,4 +28,5 @@ const pbsHealth = new PbsHealthService();
 const logs = new LokiService();
 const security = new SecurityAuditService();
 const backups = new BackupService(store);
-createApp(store, monitoring, telemetry, cmdb, logs, hardware, undefined, undefined, security, backups, collectors, serviceNow, proxmoxOperations, pbsHealth).listen(port, '0.0.0.0', () => console.log(JSON.stringify({ timestamp: new Date().toISOString(), level: 'info', service: 'sentinel-api', message: 'api_started', port })));
+const recoveryDrills = new RecoveryDrillService(backups);
+createApp(store, monitoring, telemetry, cmdb, logs, hardware, undefined, undefined, security, backups, collectors, serviceNow, proxmoxOperations, pbsHealth, recoveryDrills).listen(port, '0.0.0.0', () => console.log(JSON.stringify({ timestamp: new Date().toISOString(), level: 'info', service: 'sentinel-api', message: 'api_started', port })));

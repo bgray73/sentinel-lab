@@ -64,6 +64,8 @@ describe('authentication and authorization', () => {
     expect((await fetch(`${base}/api/backups`, { headers: viewer })).status).toBe(403);
     const admin = proxyHeaders('admin', 'admins');
     expect((await fetch(`${base}/api/backups`, { headers: admin })).status).toBe(503);
+    expect((await fetch(`${base}/api/recovery/drills`, { method: 'POST', headers: viewer })).status).toBe(403);
+    expect((await fetch(`${base}/api/recovery/drills`, { method: 'POST', headers: admin })).status).toBe(503);
   });
 
   it('allows collector visibility but restricts enrollment to administrators', async () => {
