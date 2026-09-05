@@ -112,6 +112,7 @@ function requiredRole(req: Request): Role {
     /^\/api\/incidents\/[^/]+\/acknowledge$/,
     /^\/api\/notifications\/[^/]+\/retry$/,
     /^\/api\/integrations\/servicenow\/(cmdb\/sync|changes)$/,
+    /^\/api\/proxmox\/operations\/collect$/,
     /^\/api\/topology\/mappings(?:\/[^/]+)?$/,
     /^\/api\/infrastructure\/metrics\/collect$/,
     /^\/api\/cmdb\/reconcile$/,
