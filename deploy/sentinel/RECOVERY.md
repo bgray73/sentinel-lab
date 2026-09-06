@@ -85,6 +85,22 @@ The score is weighted to keep the core recovery controls prominent: recovery-poi
 
 Use `GET /api/recovery/readiness` for the complete evidence response. Prometheus provides `sentinel_recovery_readiness_score`, `sentinel_recovery_readiness_state`, and one `sentinel_recovery_readiness_check` series per control. Alert on `not-ready` immediately and on `at-risk` only after a short hold period so a single transient PBS warning does not create noise.
 
+## Recovery-readiness incidents and notifications
+
+Stage 24 can turn readiness transitions into a normal Sentinel incident. Keep it disabled while tuning the Stage 23 policy. Confirm that the score is **ready**, review the configured notification destinations on **Alerts**, and then enable:
+
+```dotenv
+SENTINEL_RECOVERY_ALERTS_ENABLED=true
+SENTINEL_RECOVERY_ALERT_INTERVAL_SECONDS=300
+SENTINEL_RECOVERY_ALERT_COOLDOWN_SECONDS=3600
+```
+
+At startup and every configured interval, Sentinel evaluates the policy. **Not ready** creates a critical incident, **at risk** creates a warning, and **ready** resolves the active incident. Only one active incident uses the stable `system-recovery-readiness` key. Repeated failures increment its occurrence count instead of opening duplicates; reminder notifications cannot repeat until the cooldown expires. Operator acknowledgement is preserved until recovery resolves the incident.
+
+Delivery reuses `SENTINEL_REAL_NOTIFICATIONS` and the webhook, Slack, Teams, SMTP, and ServiceNow settings documented in `INTEGRATIONS.md`. In notification simulation mode, the complete incident lifecycle and delivery records are retained without external network calls. Before enabling real delivery, use a non-production destination and verify open and resolved messages.
+
+Use `POST /api/recovery/alerts/evaluate` for an immediate administrator-triggered evaluation and `GET /api/recovery/alerts` for scheduler state. The automation intentionally stops at incident creation: it does not create backups, run recovery drills, restore guests, delete guests, or change infrastructure.
+
 ## Offline data restore
 
 Never restore while the Sentinel service is running. Replace `<backup-id>` with the exact recovery point shown in the dashboard.

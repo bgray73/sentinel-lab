@@ -70,6 +70,8 @@ describe('authentication and authorization', () => {
     expect((await fetch(`${base}/api/recovery/guest-drills`, { method: 'POST', headers: admin })).status).toBe(503);
     expect((await fetch(`${base}/api/recovery/readiness`, { headers: viewer })).status).toBe(403);
     expect((await fetch(`${base}/api/recovery/readiness`, { headers: admin })).status).toBe(503);
+    expect((await fetch(`${base}/api/recovery/alerts/evaluate`, { method: 'POST', headers: viewer })).status).toBe(403);
+    expect((await fetch(`${base}/api/recovery/alerts`, { headers: admin })).status).toBe(503);
   });
 
   it('allows collector visibility but restricts enrollment to administrators', async () => {

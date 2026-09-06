@@ -454,3 +454,11 @@ The **Recovery** workspace now calculates one disaster-recovery readiness score 
 Fresh verified backups and a recent successful Sentinel restore drill are required by default. Replica, guest-drill, and live PBS evidence begin as optional so existing installations can adopt the scorecard without falsely claiming those integrations are configured. Each can be promoted to a required control independently through environment settings. Missing required evidence produces **not ready**; degraded available evidence produces **at risk**; satisfied policy produces **ready**.
 
 The administrator-only `GET /api/recovery/readiness` endpoint returns the score, policy, status, and plain-language evidence for every check. Prometheus exports the overall score and state plus a labeled series for each check, making the same policy suitable for Grafana alerts. See `deploy/sentinel/RECOVERY.md` for policy settings and a recommended rollout sequence.
+
+## Stage 24: recovery-readiness incidents
+
+Sentinel can now evaluate the disaster-recovery policy on a schedule and reconcile one deduplicated incident through the existing incident-response pipeline. A transition to **not ready** opens a critical incident; **at risk** opens or updates a warning; returning to **ready** resolves the active incident. Repeated evaluations update the same record, preserve acknowledgement state, and respect a configurable notification cooldown.
+
+The feature is disabled by default so a new installation cannot unexpectedly send messages or create ServiceNow tickets. After the Stage 23 policy is accepted and the readiness page passes, enable `SENTINEL_RECOVERY_ALERTS_ENABLED=true`. Existing notification configuration then routes recovery events to generic webhooks, Slack, Teams, email, and ServiceNow without another credential set. It never starts a backup, restore, guest drill, or other remediation action.
+
+Administrators can inspect status at `GET /api/recovery/alerts` and trigger an immediate policy evaluation at `POST /api/recovery/alerts/evaluate`. The Recovery scorecard shows whether incident automation is enabled and whether an incident is active. Recovery incidents also appear in the normal **Alerts** and **Automation** workspaces. Prometheus exports whether automation is enabled and whether its last evaluation failed.
