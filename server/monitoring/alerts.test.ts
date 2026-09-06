@@ -42,4 +42,11 @@ describe('alert and incident lifecycle', () => {
     await expect(service.updateRetention({days:0,maxResults:5000})).rejects.toThrow('between 1 and 365');
     expect(await service.updateRetention({days:90,maxResults:5000})).toEqual({days:90,maxResults:5000});expect(service.retention()).toEqual({days:90,maxResults:5000});
   });
+
+  it('deduplicates, acknowledges, and resolves a system policy incident',async()=>{
+    const directory=await mkdtemp(path.join(os.tmpdir(),'sentinel-system-incident-'));directories.push(directory);const service=new MonitoringService({SENTINEL_DATA_FILE:path.join(directory,'data.json')});await service.ready;
+    const opened=await service.reconcileSystemIncident({key:'recovery-readiness',state:'not-ready',summary:'Two required recovery controls failed',cooldownSeconds:900});expect(opened).toMatchObject({severity:'critical',status:'open',occurrences:1});expect(service.deliveries()[0]).toMatchObject({event:'opened',status:'simulated'});
+    const repeated=await service.reconcileSystemIncident({key:'recovery-readiness',state:'not-ready',summary:'Two required recovery controls failed',cooldownSeconds:900});expect(repeated?.id).toBe(opened?.id);expect(repeated?.occurrences).toBe(2);expect(service.incidents('open')).toHaveLength(1);
+    await service.acknowledgeIncident(opened!.id);const resolved=await service.reconcileSystemIncident({key:'recovery-readiness',state:'ready',summary:'All required recovery controls pass',cooldownSeconds:900});expect(resolved?.status).toBe('resolved');expect(service.deliveries().map(item=>item.event)).toEqual(['resolved','opened']);
+  });
 });

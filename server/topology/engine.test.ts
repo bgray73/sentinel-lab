@@ -20,4 +20,8 @@ describe('dependency topology and correlation',()=>{
     expect(snapshot.edges).toContainEqual({from:'qemu/108',to:'service/monitor-dns',relation:'monitors',inferred:false});
     expect(snapshot.edges.some(edge=>edge.to==='service/monitor-dns'&&edge.inferred)).toBe(false);
   });
+  it('ignores system incidents that do not represent a service node',()=>{
+    const snapshot=buildTopology(simulatedInventory(),simulatedDockerInventory(),monitors,{mappings:[],incidents:[{id:'i-system',ruleId:'system-recovery-readiness',monitorId:'system/recovery-readiness',title:'Disaster recovery is not ready',summary:'failed',severity:'critical',status:'open',occurrences:1,openedAt:new Date().toISOString(),updatedAt:new Date().toISOString()}]});
+    expect(snapshot.correlations).toEqual([]);
+  });
 });

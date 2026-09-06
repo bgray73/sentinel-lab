@@ -52,6 +52,7 @@ function correlate(nodes: TopologyNode[], edges: TopologyEdge[], incidents: Corr
   const assignments = new Map<string,{incidents:typeof active;distances:number[]}>();
   for (const incident of active) {
     const serviceId=`service/${incident.monitorId}`; const queue=[{id:serviceId,distance:0}]; const seen=new Set<string>(); const candidates:Array<{id:string,distance:number,score:number}>=[];
+    if(!nodeMap.has(serviceId))continue;
     while(queue.length){const current=queue.shift()!;if(seen.has(current.id))continue;seen.add(current.id);const node=nodeMap.get(current.id);if(current.distance>0&&node&&(node.health==='critical'||node.health==='warning'))candidates.push({id:node.id,distance:current.distance,score:(node.health==='critical'?60:35)+Math.max(0,20-current.distance*4)});for(const parent of incoming.get(current.id)||[])queue.push({id:parent,distance:current.distance+1});}
     const best=candidates.sort((a,b)=>b.score-a.score)[0]||{id:serviceId,distance:0,score:35}; const group=assignments.get(best.id)||{incidents:[],distances:[]}; group.incidents.push(incident);group.distances.push(best.distance);assignments.set(best.id,group);
   }

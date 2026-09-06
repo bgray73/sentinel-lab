@@ -16,6 +16,7 @@ import { PbsHealthService } from './pbs/service.js';
 import { RecoveryDrillService } from './recovery/drills.js';
 import { GuestRecoveryDrillService } from './recovery/guest-drills.js';
 import { RecoveryReadinessService } from './recovery/readiness.js';
+import { RecoveryAlertService } from './recovery/alerts.js';
 
 const port = Number(process.env.PORT || 4100);
 const store = new Store(process.env.DATABASE_PATH || resolve('data/sentinel.db'));
@@ -33,4 +34,5 @@ const backups = new BackupService(store);
 const recoveryDrills = new RecoveryDrillService(backups);
 const guestDrills = new GuestRecoveryDrillService();
 const recoveryReadiness = new RecoveryReadinessService(backups, recoveryDrills, guestDrills, pbsHealth);
-createApp(store, monitoring, telemetry, cmdb, logs, hardware, undefined, undefined, security, backups, collectors, serviceNow, proxmoxOperations, pbsHealth, recoveryDrills, guestDrills, recoveryReadiness).listen(port, '0.0.0.0', () => console.log(JSON.stringify({ timestamp: new Date().toISOString(), level: 'info', service: 'sentinel-api', message: 'api_started', port })));
+const recoveryAlerts = new RecoveryAlertService(recoveryReadiness, monitoring);
+createApp(store, monitoring, telemetry, cmdb, logs, hardware, undefined, undefined, security, backups, collectors, serviceNow, proxmoxOperations, pbsHealth, recoveryDrills, guestDrills, recoveryReadiness, recoveryAlerts).listen(port, '0.0.0.0', () => console.log(JSON.stringify({ timestamp: new Date().toISOString(), level: 'info', service: 'sentinel-api', message: 'api_started', port })));
