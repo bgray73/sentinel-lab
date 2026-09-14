@@ -126,6 +126,9 @@ export type TelemetryPoint={timestamp:string;samples:number;cpuPercent:number|nu
 export type TelemetrySample={id:string;resourceId:string;name:string;type:'node'|'vm'|'lxc'|'container';source:'proxmox'|'docker';state:string;cpuPercent:number;memoryPercent:number|null;diskPercent:number|null;networkRxBytesPerSecond:number|null;networkTxBytesPerSecond:number|null;diskReadBytesPerSecond:number|null;diskWriteBytesPerSecond:number|null;collectedAt:string};
 export type TelemetrySeries={resourceId:string;name:string;type:TelemetrySample['type'];source:TelemetrySample['source'];state:string;latest:TelemetrySample;points:TelemetryPoint[]};
 export type TelemetrySnapshot={range:MetricRange;start:string;end:string;bucketSeconds:number;summary:{resources:number;proxmoxResources:number;containers:number;warningResources:number;sampleCount:number};series:TelemetrySeries[]};
+export type CapacityMetric='cpu'|'memory'|'disk';
+export type CapacityForecast={resourceId:string;name:string;type:TelemetrySample['type'];source:TelemetrySample['source'];metric:CapacityMetric;currentPercent:number|null;slopePercentPerDay:number|null;projectedPercent:number|null;daysToThreshold:number|null;state:'critical'|'warning'|'healthy'|'stable'|'insufficient';confidence:'low'|'medium'|'high';samples:number;spanDays:number;rSquared:number|null};
+export type CapacityForecastSnapshot={mode:'simulation'|'live';evaluatedAt:string;policy:{thresholdPercent:number;horizonDays:number;warningDays:number;criticalDays:number;minimumSamples:number;minimumSpanDays:number};summary:{resources:number;forecasts:number;critical:number;warning:number;healthy:number;stable:number;insufficient:number;nearestDays:number|null};items:CapacityForecast[]};
 
 export type CiClass='node'|'vm'|'lxc'|'storage'|'docker_host'|'application'|'container'|'service'|'database'|'network'|'physical_server'|'switch'|'router'|'ups'|'pdu'|'storage_appliance'|'other';
 export type CiLifecycle='active'|'stale'|'retired';
