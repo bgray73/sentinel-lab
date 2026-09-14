@@ -462,3 +462,9 @@ Sentinel can now evaluate the disaster-recovery policy on a schedule and reconci
 The feature is disabled by default so a new installation cannot unexpectedly send messages or create ServiceNow tickets. After the Stage 23 policy is accepted and the readiness page passes, enable `SENTINEL_RECOVERY_ALERTS_ENABLED=true`. Existing notification configuration then routes recovery events to generic webhooks, Slack, Teams, email, and ServiceNow without another credential set. It never starts a backup, restore, guest drill, or other remediation action.
 
 Administrators can inspect status at `GET /api/recovery/alerts` and trigger an immediate policy evaluation at `POST /api/recovery/alerts/evaluate`. The Recovery scorecard shows whether incident automation is enabled and whether an incident is active. Recovery incidents also appear in the normal **Alerts** and **Automation** workspaces. Prometheus exports whether automation is enabled and whether its last evaluation failed.
+
+## Stage 25: capacity forecasting
+
+The **Performance** page now forecasts CPU, memory, and disk utilization from the retained 30-day telemetry window. Sentinel shows projected days to the 90% threshold, the 30-day projected value, trend confidence, and a clear collecting-data state when history is not yet sufficient. Current threshold breaches are critical immediately; sustained trends become critical inside 7 days or warning inside 30 days.
+
+Forecasting is advisory and does not resize, migrate, or stop a workload. The API is available at `GET /api/capacity/forecasts`, and Prometheus receives current utilization, days-to-threshold, and state series. See [the capacity runbook](deploy/sentinel/CAPACITY.md) before creating alerts or changing the baseline requirements.
