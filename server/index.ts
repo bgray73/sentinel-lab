@@ -18,6 +18,7 @@ import { GuestRecoveryDrillService } from './recovery/guest-drills.js';
 import { RecoveryReadinessService } from './recovery/readiness.js';
 import { RecoveryAlertService } from './recovery/alerts.js';
 import { CapacityForecastService } from './capacity/forecast.js';
+import { CapacityAlertService } from './capacity/alerts.js';
 
 const port = Number(process.env.PORT || 4100);
 const store = new Store(process.env.DATABASE_PATH || resolve('data/sentinel.db'));
@@ -37,4 +38,5 @@ const guestDrills = new GuestRecoveryDrillService();
 const recoveryReadiness = new RecoveryReadinessService(backups, recoveryDrills, guestDrills, pbsHealth);
 const recoveryAlerts = new RecoveryAlertService(recoveryReadiness, monitoring);
 const capacityForecasts = new CapacityForecastService(telemetry);
-createApp(store, monitoring, telemetry, cmdb, logs, hardware, undefined, undefined, security, backups, collectors, serviceNow, proxmoxOperations, pbsHealth, recoveryDrills, guestDrills, recoveryReadiness, recoveryAlerts, capacityForecasts).listen(port, '0.0.0.0', () => console.log(JSON.stringify({ timestamp: new Date().toISOString(), level: 'info', service: 'sentinel-api', message: 'api_started', port })));
+const capacityAlerts = new CapacityAlertService(capacityForecasts, monitoring);
+createApp(store, monitoring, telemetry, cmdb, logs, hardware, undefined, undefined, security, backups, collectors, serviceNow, proxmoxOperations, pbsHealth, recoveryDrills, guestDrills, recoveryReadiness, recoveryAlerts, capacityForecasts, capacityAlerts).listen(port, '0.0.0.0', () => console.log(JSON.stringify({ timestamp: new Date().toISOString(), level: 'info', service: 'sentinel-api', message: 'api_started', port })));

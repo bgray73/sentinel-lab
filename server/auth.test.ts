@@ -33,6 +33,7 @@ describe('authentication and authorization', () => {
     const session = await fetch(`${base}/api/session`, { headers });
     expect((await session.json()).user.role).toBe('viewer');
     expect((await fetch(`${base}/api/tests`, { headers })).status).toBe(200);
+    expect((await fetch(`${base}/api/capacity/alerts`, { headers })).status).toBe(503);
     expect((await fetch(`${base}/api/runs`, { method: 'POST', headers: { ...headers, 'content-type': 'application/json' }, body: '{"simulate":true}' })).status).toBe(403);
   });
 
@@ -72,6 +73,8 @@ describe('authentication and authorization', () => {
     expect((await fetch(`${base}/api/recovery/readiness`, { headers: admin })).status).toBe(503);
     expect((await fetch(`${base}/api/recovery/alerts/evaluate`, { method: 'POST', headers: viewer })).status).toBe(403);
     expect((await fetch(`${base}/api/recovery/alerts`, { headers: admin })).status).toBe(503);
+    expect((await fetch(`${base}/api/capacity/alerts/evaluate`, { method: 'POST', headers: viewer })).status).toBe(403);
+    expect((await fetch(`${base}/api/capacity/alerts/evaluate`, { method: 'POST', headers: admin })).status).toBe(503);
   });
 
   it('allows collector visibility but restricts enrollment to administrators', async () => {
