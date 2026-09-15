@@ -106,14 +106,14 @@ export class MonitoringService {
     const incident = this.data.incidents.find(item => item.id === id); if (!incident || incident.status === 'resolved') throw new Error('Active incident not found');
     incident.status = 'acknowledged'; incident.acknowledgedAt = new Date().toISOString(); incident.updatedAt = incident.acknowledgedAt; await this.store.save(this.data); return incident;
   }
-  async reconcileSystemIncident(input:{key:string;state:'ready'|'at-risk'|'not-ready';summary:string;cooldownSeconds:number}) {
+  async reconcileSystemIncident(input:{key:string;state:'ready'|'at-risk'|'not-ready';summary:string;cooldownSeconds:number;title?:string}) {
     if(!/^[a-z0-9-]{1,80}$/.test(input.key)||!['ready','at-risk','not-ready'].includes(input.state)||!input.summary||input.summary.length>1_000||!Number.isInteger(input.cooldownSeconds)||input.cooldownSeconds<60||input.cooldownSeconds>604_800)throw new Error('System incident requires a valid key, state, summary, and cooldown');
     const ruleId=`system-${input.key}`,monitorId=`system/${input.key}`,existing=this.data.incidents.find(item=>item.ruleId===ruleId&&item.status!=='resolved'),now=new Date().toISOString();
     if(input.state==='ready'){
       if(existing){existing.status='resolved';existing.resolvedAt=now;existing.updatedAt=now;existing.summary=input.summary;await this.notify(existing,'resolved');await this.store.save(this.data)}
       return existing||null;
     }
-    const severity:AlertSeverity=input.state==='not-ready'?'critical':'warning',title=input.state==='not-ready'?'Disaster recovery is not ready':'Disaster recovery is at risk';
+    const severity:AlertSeverity=input.state==='not-ready'?'critical':'warning',title=input.title||(input.state==='not-ready'?'Disaster recovery is not ready':'Disaster recovery is at risk');
     if(existing){existing.severity=severity;existing.title=title;existing.summary=input.summary;existing.occurrences+=1;existing.updatedAt=now;const last=existing.lastNotificationAt?new Date(existing.lastNotificationAt).getTime():0;if(Date.now()-last>=input.cooldownSeconds*1_000)await this.notify(existing,'reminder');await this.store.save(this.data);return existing}
     const incident:Incident={id:`incident-${crypto.randomUUID()}`,ruleId,monitorId,title,summary:input.summary,severity,status:'open',occurrences:1,openedAt:now,updatedAt:now};this.data.incidents.unshift(incident);await this.notify(incident,'opened');await this.store.save(this.data);return incident;
   }

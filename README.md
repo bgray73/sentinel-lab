@@ -468,3 +468,9 @@ Administrators can inspect status at `GET /api/recovery/alerts` and trigger an i
 The **Performance** page now forecasts CPU, memory, and disk utilization from the retained 30-day telemetry window. Sentinel shows projected days to the 90% threshold, the 30-day projected value, trend confidence, and a clear collecting-data state when history is not yet sufficient. Current threshold breaches are critical immediately; sustained trends become critical inside 7 days or warning inside 30 days.
 
 Forecasting is advisory and does not resize, migrate, or stop a workload. The API is available at `GET /api/capacity/forecasts`, and Prometheus receives current utilization, days-to-threshold, and state series. See [the capacity runbook](deploy/sentinel/CAPACITY.md) before creating alerts or changing the baseline requirements.
+
+## Stage 26: capacity forecast incidents
+
+Sentinel can now evaluate capacity forecasts on a schedule and reconcile a separate, deduplicated incident for each resource and metric. Forecast-driven alerts require high confidence by default, while a current reading already at the utilization threshold qualifies immediately. Acknowledgement, reminder cooldowns, simulated or real delivery, ServiceNow routing, and automatic resolution all reuse the existing incident-response pipeline.
+
+The automation is opt-in and advisory: it never resizes, migrates, stops, or modifies infrastructure. Enable `SENTINEL_CAPACITY_ALERTS_ENABLED=true` only after the retained telemetry baseline is representative. The Performance page shows alert status and permits administrator-triggered evaluation; `GET /api/capacity/alerts`, `POST /api/capacity/alerts/evaluate`, and Prometheus expose the same operational state. See [the capacity runbook](deploy/sentinel/CAPACITY.md) for rollout guidance.

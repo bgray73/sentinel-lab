@@ -129,6 +129,7 @@ export type TelemetrySnapshot={range:MetricRange;start:string;end:string;bucketS
 export type CapacityMetric='cpu'|'memory'|'disk';
 export type CapacityForecast={resourceId:string;name:string;type:TelemetrySample['type'];source:TelemetrySample['source'];metric:CapacityMetric;currentPercent:number|null;slopePercentPerDay:number|null;projectedPercent:number|null;daysToThreshold:number|null;state:'critical'|'warning'|'healthy'|'stable'|'insufficient';confidence:'low'|'medium'|'high';samples:number;spanDays:number;rSquared:number|null};
 export type CapacityForecastSnapshot={mode:'simulation'|'live';evaluatedAt:string;policy:{thresholdPercent:number;horizonDays:number;warningDays:number;criticalDays:number;minimumSamples:number;minimumSpanDays:number};summary:{resources:number;forecasts:number;critical:number;warning:number;healthy:number;stable:number;insufficient:number;nearestDays:number|null};items:CapacityForecast[]};
+export type CapacityAlertSnapshot={status:{enabled:boolean;intervalSeconds:number;cooldownSeconds:number;minimumConfidence:'low'|'medium'|'high';lastEvaluatedAt:string|null;lastState:'healthy'|'warning'|'critical'|null;lastError:string;eligibleForecasts:number;activeIncidents:number};incidents:Incident[]};
 
 export type CiClass='node'|'vm'|'lxc'|'storage'|'docker_host'|'application'|'container'|'service'|'database'|'network'|'physical_server'|'switch'|'router'|'ups'|'pdu'|'storage_appliance'|'other';
 export type CiLifecycle='active'|'stale'|'retired';
