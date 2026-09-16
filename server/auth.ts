@@ -117,6 +117,7 @@ function requiredRole(req: Request): Role {
     /^\/api\/topology\/mappings(?:\/[^/]+)?$/,
     /^\/api\/infrastructure\/metrics\/collect$/,
     /^\/api\/network\/interfaces\/collect$/,
+    /^\/api\/network\/alerts\/evaluate$/,
     /^\/api\/cmdb\/reconcile$/,
     /^\/api\/hardware\/(discover|maintenance(?:\/[^/]+)?|baselines\/[^/]+)$/
   ];

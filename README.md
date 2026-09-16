@@ -480,3 +480,9 @@ The automation is opt-in and advisory: it never resizes, migrates, stops, or mod
 The **Network** workspace adds read-only interface monitoring for SNMP switch and router targets. It tracks administrative and operational state, negotiated speed, receive and transmit rates, utilization, errors, discards, and unexpected link transitions. Administratively disabled ports remain visible without generating false critical health.
 
 Live collection reuses the existing Prometheus SNMP Exporter and `SENTINEL_SNMP_TARGETS`; no device credential is added to Sentinel. Counter rates intentionally show a pending baseline after the first poll or a counter reset. The API is available at `GET /api/network/interfaces` and operators can request a collection with `POST /api/network/interfaces/collect`. Prometheus exports interface health, utilization, errors, and recent flaps. See [the network runbook](deploy/sentinel/NETWORK.md) before enabling `SENTINEL_REAL_NETWORK=true`.
+
+## Stage 28: network interface incidents
+
+Sentinel can now reconcile a separate, deduplicated incident for every degraded interface. Enabled links that are down and critical threshold breaches open critical incidents; warning utilization, error/discard rates, and repeated transitions open warning incidents. Returning to healthy automatically resolves the matching incident.
+
+The automation is disabled by default and never changes switch configuration. Enable `SENTINEL_NETWORK_ALERTS_ENABLED=true` only after validating interface aliases, expected disabled ports, and the Stage 27 thresholds. Alerts reuse the existing acknowledgement, cooldown, notification, and ServiceNow pipeline. Status and manual evaluation are available through `GET /api/network/alerts` and `POST /api/network/alerts/evaluate`; the Network workspace and Prometheus expose the same state.
