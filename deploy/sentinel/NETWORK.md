@@ -52,3 +52,17 @@ The state file is `/var/lib/sentinel/network.json` in the provided compose deplo
 - `/metrics` exposes `sentinel_network_interface_health`, `sentinel_network_interface_utilization_percent`, `sentinel_network_interface_errors_per_second`, and `sentinel_network_interface_flaps_recent`.
 
 If all targets fail, confirm exporter reachability, target ACLs, the module name, and the SNMPv3 profile. A device reboot or counter wrap creates a fresh rate baseline instead of a negative spike.
+
+## Incident automation
+
+Stage 28 can convert each warning or critical interface into a stable, deduplicated incident. Incident keys are derived from the stable device ID and interface index, so interface aliases may change without creating duplicates. A healthy evaluation resolves the active incident automatically. Acknowledgement state, reminder cooldowns, simulated or live notification channels, and ServiceNow ticket routing reuse Sentinel's normal incident pipeline.
+
+Keep the feature disabled during initial baseline review:
+
+```dotenv
+SENTINEL_NETWORK_ALERTS_ENABLED=false
+SENTINEL_NETWORK_ALERT_INTERVAL_SECONDS=60
+SENTINEL_NETWORK_ALERT_COOLDOWN_SECONDS=3600
+```
+
+Before enabling it, confirm that unused ports are administratively down, aliases identify important uplinks, and the utilization/error/flap thresholds match the fabric. Then enable the feature and use `POST /api/network/alerts/evaluate` for a controlled first evaluation. `GET /api/network/alerts` reports automation state and active network incidents. Prometheus exports `sentinel_network_alerts_enabled`, `sentinel_network_alert_active_incidents`, and `sentinel_network_alert_monitor_error`.

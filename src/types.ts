@@ -85,6 +85,7 @@ export type NetworkInterface={key:string;deviceId:string;deviceName:string;manag
 export type NetworkFlap={id:string;key:string;deviceId:string;deviceName:string;ifIndex:string;interfaceName:string;from:NetworkInterfaceState;to:NetworkInterfaceState;detectedAt:string};
 export type NetworkSnapshot={mode:'simulation'|'live';collectedAt:string;interfaces:NetworkInterface[];flaps:NetworkFlap[];collectionErrors:string[];summary:{devices:number;interfaces:number;up:number;down:number;disabled:number;warning:number;critical:number;highUtilization:number;erroring:number;recentFlaps:number}};
 export type NetworkResponse={status:{mode:'simulation'|'live';configured:boolean;intervalSeconds:number;lastCollectedAt:string|null;lastError:string;targets:number;thresholds:{utilizationWarningPercent:number;utilizationCriticalPercent:number;errorsWarningPerSecond:number;errorsCriticalPerSecond:number;flapWindowMinutes:number;flapWarningCount:number}};current:NetworkSnapshot|null};
+export type NetworkAlertSnapshot={status:{enabled:boolean;intervalSeconds:number;cooldownSeconds:number;lastEvaluatedAt:string|null;lastState:'healthy'|'warning'|'critical'|null;lastError:string;eligibleInterfaces:number;activeIncidents:number};incidents:Incident[]};
 
 export type MonitorProtocol = 'http' | 'tcp' | 'dns';
 export type MonitorResult = { id: string; monitorId: string; status: 'up' | 'down'; latencyMs: number; detail: string; checkedAt: string };
