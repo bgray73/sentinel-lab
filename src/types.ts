@@ -79,6 +79,12 @@ export type HardwareFinding={id:string;deviceId:string;deviceName:string;kind:st
 export type MaintenanceWindow={id:string;deviceId:string;reason:string;startsAt:string;endsAt:string;createdAt:string};
 export type FirmwareBaseline={deviceId:string;firmwareVersion:string;model:string;serialNumber:string;recordedAt:string};
 export type HardwareOperations={findings:HardwareFinding[];maintenanceWindows:MaintenanceWindow[];firmwareBaselines:FirmwareBaseline[];summary:{active:number;critical:number;warnings:number;suppressed:number;maintenance:number;baselines:number}};
+export type NetworkInterfaceState='up'|'down'|'testing'|'dormant'|'not-present'|'lower-layer-down'|'unknown';
+export type NetworkInterfaceHealth='healthy'|'warning'|'critical'|'disabled'|'unknown';
+export type NetworkInterface={key:string;deviceId:string;deviceName:string;managementAddress:string;ifIndex:string;name:string;alias:string;adminState:NetworkInterfaceState;operState:NetworkInterfaceState;health:NetworkInterfaceHealth;speedMbps:number|null;rxBytesPerSecond:number|null;txBytesPerSecond:number|null;utilizationPercent:number|null;errorsPerSecond:number|null;discardsPerSecond:number|null;flapsInWindow:number;lastChangeSeconds:number|null;collectedAt:string};
+export type NetworkFlap={id:string;key:string;deviceId:string;deviceName:string;ifIndex:string;interfaceName:string;from:NetworkInterfaceState;to:NetworkInterfaceState;detectedAt:string};
+export type NetworkSnapshot={mode:'simulation'|'live';collectedAt:string;interfaces:NetworkInterface[];flaps:NetworkFlap[];collectionErrors:string[];summary:{devices:number;interfaces:number;up:number;down:number;disabled:number;warning:number;critical:number;highUtilization:number;erroring:number;recentFlaps:number}};
+export type NetworkResponse={status:{mode:'simulation'|'live';configured:boolean;intervalSeconds:number;lastCollectedAt:string|null;lastError:string;targets:number;thresholds:{utilizationWarningPercent:number;utilizationCriticalPercent:number;errorsWarningPerSecond:number;errorsCriticalPerSecond:number;flapWindowMinutes:number;flapWarningCount:number}};current:NetworkSnapshot|null};
 
 export type MonitorProtocol = 'http' | 'tcp' | 'dns';
 export type MonitorResult = { id: string; monitorId: string; status: 'up' | 'down'; latencyMs: number; detail: string; checkedAt: string };

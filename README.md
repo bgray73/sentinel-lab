@@ -474,3 +474,9 @@ Forecasting is advisory and does not resize, migrate, or stop a workload. The AP
 Sentinel can now evaluate capacity forecasts on a schedule and reconcile a separate, deduplicated incident for each resource and metric. Forecast-driven alerts require high confidence by default, while a current reading already at the utilization threshold qualifies immediately. Acknowledgement, reminder cooldowns, simulated or real delivery, ServiceNow routing, and automatic resolution all reuse the existing incident-response pipeline.
 
 The automation is opt-in and advisory: it never resizes, migrates, stops, or modifies infrastructure. Enable `SENTINEL_CAPACITY_ALERTS_ENABLED=true` only after the retained telemetry baseline is representative. The Performance page shows alert status and permits administrator-triggered evaluation; `GET /api/capacity/alerts`, `POST /api/capacity/alerts/evaluate`, and Prometheus expose the same operational state. See [the capacity runbook](deploy/sentinel/CAPACITY.md) for rollout guidance.
+
+## Stage 27: network interface health
+
+The **Network** workspace adds read-only interface monitoring for SNMP switch and router targets. It tracks administrative and operational state, negotiated speed, receive and transmit rates, utilization, errors, discards, and unexpected link transitions. Administratively disabled ports remain visible without generating false critical health.
+
+Live collection reuses the existing Prometheus SNMP Exporter and `SENTINEL_SNMP_TARGETS`; no device credential is added to Sentinel. Counter rates intentionally show a pending baseline after the first poll or a counter reset. The API is available at `GET /api/network/interfaces` and operators can request a collection with `POST /api/network/interfaces/collect`. Prometheus exports interface health, utilization, errors, and recent flaps. See [the network runbook](deploy/sentinel/NETWORK.md) before enabling `SENTINEL_REAL_NETWORK=true`.

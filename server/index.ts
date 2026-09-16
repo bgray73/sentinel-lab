@@ -19,6 +19,7 @@ import { RecoveryReadinessService } from './recovery/readiness.js';
 import { RecoveryAlertService } from './recovery/alerts.js';
 import { CapacityForecastService } from './capacity/forecast.js';
 import { CapacityAlertService } from './capacity/alerts.js';
+import { NetworkService } from './network/service.js';
 
 const port = Number(process.env.PORT || 4100);
 const store = new Store(process.env.DATABASE_PATH || resolve('data/sentinel.db'));
@@ -39,4 +40,5 @@ const recoveryReadiness = new RecoveryReadinessService(backups, recoveryDrills, 
 const recoveryAlerts = new RecoveryAlertService(recoveryReadiness, monitoring);
 const capacityForecasts = new CapacityForecastService(telemetry);
 const capacityAlerts = new CapacityAlertService(capacityForecasts, monitoring);
-createApp(store, monitoring, telemetry, cmdb, logs, hardware, undefined, undefined, security, backups, collectors, serviceNow, proxmoxOperations, pbsHealth, recoveryDrills, guestDrills, recoveryReadiness, recoveryAlerts, capacityForecasts, capacityAlerts).listen(port, '0.0.0.0', () => console.log(JSON.stringify({ timestamp: new Date().toISOString(), level: 'info', service: 'sentinel-api', message: 'api_started', port })));
+const network = new NetworkService();
+createApp(store, monitoring, telemetry, cmdb, logs, hardware, undefined, undefined, security, backups, collectors, serviceNow, proxmoxOperations, pbsHealth, recoveryDrills, guestDrills, recoveryReadiness, recoveryAlerts, capacityForecasts, capacityAlerts, network).listen(port, '0.0.0.0', () => console.log(JSON.stringify({ timestamp: new Date().toISOString(), level: 'info', service: 'sentinel-api', message: 'api_started', port })));
