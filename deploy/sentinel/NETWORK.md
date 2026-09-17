@@ -66,3 +66,7 @@ SENTINEL_NETWORK_ALERT_COOLDOWN_SECONDS=3600
 ```
 
 Before enabling it, confirm that unused ports are administratively down, aliases identify important uplinks, and the utilization/error/flap thresholds match the fabric. Then enable the feature and use `POST /api/network/alerts/evaluate` for a controlled first evaluation. `GET /api/network/alerts` reports automation state and active network incidents. Prometheus exports `sentinel_network_alerts_enabled`, `sentinel_network_alert_active_incidents`, and `sentinel_network_alert_monitor_error`.
+
+## CMDB links
+
+Stage 29 reconciles each network port as a `network_interface` CI. The switch/router device contains the interface. An alias such as `pve-01 40G uplink` links to a uniquely named `pve-01` Proxmox node; aliases that contain two endpoint names or no exact endpoint name remain unlinked. Use the CMDB relationship API to record verified connections where aliases are missing. Discovered network relationships are refreshed after a complete poll, while operator-created relationships remain intact. An incomplete poll retains the previous inferred links until the next complete reconciliation.

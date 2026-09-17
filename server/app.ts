@@ -291,7 +291,9 @@ export function createApp(store: Store, monitoring?: MonitoringService, telemetr
         if (!proxmoxConfig || !dockerConfig) return res.status(503).json({ error: 'Live topology requires both Proxmox and Docker connections' });
         [proxmox, docker] = await Promise.all([discoverProxmox(proxmoxConfig), discoverDocker(dockerConfig)]);
       }
-      return res.json(buildTopology(proxmox, docker, monitoring.list(), { incidents: monitoring.incidents(), mappings: monitoring.dependencies() }));
+      if(cmdb)await cmdb.ready;
+      const networkGraph=cmdb?.status().mode===(simulate?'simulation':'live')?{items:cmdb.list(),relationships:cmdb.relationships()}:undefined;
+      return res.json(buildTopology(proxmox, docker, monitoring.list(), { incidents: monitoring.incidents(), mappings: monitoring.dependencies() },networkGraph));
     } catch (error) { return res.status(502).json({ error: error instanceof Error ? error.message : 'Topology discovery failed' }); }
   });
   app.post('/api/topology/mappings', async (req, res) => {

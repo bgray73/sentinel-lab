@@ -1,6 +1,8 @@
 import type { MonitorView } from '../monitoring/types.js';
 import type { DockerInventory } from '../docker/types.js';
 import type { ProxmoxInventory } from '../proxmox/types.js';
+import type { CmdbRelationship, ConfigurationItem } from '../cmdb/types.js';
+import { networkTopology } from './network.js';
 import type { CorrelationGroup, CorrelationInput, TopologyEdge, TopologyHealth, TopologyNode, TopologySnapshot } from './types.js';
 
 function workloadHealth(state: string, health: TopologyHealth): TopologyHealth { return ['stopped','dead','exited','offline'].includes(state.toLowerCase()) ? 'critical' : health; }
@@ -10,7 +12,7 @@ function matchScore(monitor: MonitorView, node: TopologyNode) {
   return words(`${node.name} ${node.detail || ''}`).reduce((score, word) => score + (monitorWords.has(word) ? 1 : 0), 0);
 }
 
-export function buildTopology(proxmox: ProxmoxInventory, docker: DockerInventory, monitors: MonitorView[], input: CorrelationInput): TopologySnapshot {
+export function buildTopology(proxmox: ProxmoxInventory, docker: DockerInventory, monitors: MonitorView[], input: CorrelationInput, network?: {items: ConfigurationItem[]; relationships: CmdbRelationship[]}): TopologySnapshot {
   const nodes: TopologyNode[] = []; const edges: TopologyEdge[] = [];
   for (const resource of proxmox.resources) {
     if (resource.type === 'storage') continue;
@@ -39,6 +41,12 @@ export function buildTopology(proxmox: ProxmoxInventory, docker: DockerInventory
       const candidates = nodes.filter(node=>node.type!=='service' && node.type!=='node').map(node=>({node,score:matchScore(monitor,node)})).filter(candidate=>candidate.score>0).sort((a,b)=>b.score-a.score);
       if (candidates[0]) edges.push({ from: candidates[0].node.id, to: serviceId, relation: 'monitors', inferred: true });
     }
+  }
+  if (network) {
+    const discovered = networkTopology(network.items, network.relationships);
+    nodes.push(...discovered.nodes);
+    const known = new Set(nodes.map(node => node.id));
+    edges.push(...discovered.edges.filter(edge => known.has(edge.from) && known.has(edge.to)));
   }
   const correlations = correlate(nodes, edges, input.incidents);
   const mapped = new Set(edges.filter(edge=>edge.relation==='monitors').map(edge=>edge.to));

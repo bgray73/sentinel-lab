@@ -333,7 +333,7 @@ function simulated(collectedAt: string): NetworkInterface[] {
       "10.20.0.2",
       "4",
       "Ethernet1/4",
-      "PBS 40G uplink",
+      "storage-01 PBS 40G uplink",
       40000,
       31.6,
     ],

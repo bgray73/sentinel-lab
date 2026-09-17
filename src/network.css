@@ -30,6 +30,7 @@
 .network-row { display: grid; grid-template-columns: minmax(180px, 1.4fr) minmax(100px, .7fr) minmax(110px, .8fr) minmax(150px, 1fr) minmax(100px, .7fr); gap: 14px; align-items: center; padding: 12px 20px; border-top: 1px solid #edf0f2; min-width: 760px; }
 .network-row > span { display: flex; flex-direction: column; gap: 3px; min-width: 0; font-size: 9px; }
 .network-row > span:first-child strong { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.network-row .network-connected { color: #1769dd; font-weight: 700; }
 .network-row-head { padding-top: 9px; padding-bottom: 9px; color: var(--muted); font: 8px DM Mono; text-transform: uppercase; letter-spacing: .08em; }
 .network-row.warning { background: #fffaf2; }
 .network-row.critical { background: #fff5f4; }
