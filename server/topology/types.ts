@@ -1,9 +1,9 @@
 import type { AlertSeverity, DependencyMapping, Incident } from '../monitoring/types.js';
 
-export type TopologyNodeType = 'node' | 'vm' | 'lxc' | 'docker-host' | 'application' | 'container' | 'service';
+export type TopologyNodeType = 'node' | 'vm' | 'lxc' | 'docker-host' | 'application' | 'container' | 'service' | 'switch' | 'router' | 'storage-appliance' | 'network-interface';
 export type TopologyHealth = 'healthy' | 'warning' | 'critical' | 'unknown';
-export type TopologyNode = { id: string; type: TopologyNodeType; name: string; state: string; health: TopologyHealth; source: 'proxmox' | 'docker' | 'monitoring'; detail?: string };
-export type TopologyEdge = { from: string; to: string; relation: 'contains' | 'hosts' | 'runs' | 'monitors'; inferred: boolean };
+export type TopologyNode = { id: string; type: TopologyNodeType; name: string; state: string; health: TopologyHealth; source: 'proxmox' | 'docker' | 'monitoring' | 'hardware' | 'network'; detail?: string };
+export type TopologyEdge = { from: string; to: string; relation: 'contains' | 'hosts' | 'runs' | 'monitors' | 'connected_to'; inferred: boolean };
 export type CorrelationGroup = {
   id: string;
   rootNodeId: string;
