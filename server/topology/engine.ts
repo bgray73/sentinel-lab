@@ -2,6 +2,7 @@ import type { MonitorView } from '../monitoring/types.js';
 import type { DockerInventory } from '../docker/types.js';
 import type { ProxmoxInventory } from '../proxmox/types.js';
 import type { CmdbRelationship, ConfigurationItem } from '../cmdb/types.js';
+import { networkInterfaceIncidentKey } from '../network/identity.js';
 import { networkTopology } from './network.js';
 import type { CorrelationGroup, CorrelationInput, TopologyEdge, TopologyHealth, TopologyNode, TopologySnapshot } from './types.js';
 
@@ -48,21 +49,36 @@ export function buildTopology(proxmox: ProxmoxInventory, docker: DockerInventory
     const known = new Set(nodes.map(node => node.id));
     edges.push(...discovered.edges.filter(edge => known.has(edge.from) && known.has(edge.to)));
   }
-  const correlations = correlate(nodes, edges, input.incidents);
+  const portIncidents = new Map(network?.items.filter(item => item.lifecycle === 'active' && item.class === 'network_interface' && typeof item.attributes.deviceId === 'string' && typeof item.attributes.ifIndex === 'string' && nodes.some(node => node.id === item.externalId)).map(item => [
+    `system-${networkInterfaceIncidentKey(String(item.attributes.deviceId), String(item.attributes.ifIndex))}`, item.externalId,
+  ]) || []);
+  const correlations = correlate(nodes, edges, input.incidents, portIncidents);
   const mapped = new Set(edges.filter(edge=>edge.relation==='monitors').map(edge=>edge.to));
   return { collectedAt: new Date().toISOString(), nodes, edges, correlations, mappings: input.mappings, summary: { nodes: nodes.length, relationships: edges.length, services: monitors.length, unhealthyDependencies: nodes.filter(node=>node.type!=='service' && (node.health==='critical'||node.health==='warning')).length, correlatedGroups: correlations.length, unmappedServices: monitors.filter(monitor=>!mapped.has(`service/${monitor.id}`)).length } };
 }
 
-function correlate(nodes: TopologyNode[], edges: TopologyEdge[], incidents: CorrelationInput['incidents']): CorrelationGroup[] {
+function correlate(nodes: TopologyNode[], edges: TopologyEdge[], incidents: CorrelationInput['incidents'], portIncidents: Map<string,string>): CorrelationGroup[] {
   const active = incidents.filter(incident=>incident.status!=='resolved'); if (!active.length) return [];
-  const nodeMap = new Map(nodes.map(node=>[node.id,node])); const incoming = new Map<string,string[]>();
-  for (const edge of edges) incoming.set(edge.to,[...(incoming.get(edge.to)||[]),edge.from]);
+  const nodeMap = new Map(nodes.map(node=>[node.id,node])); const incoming = new Map<string,string[]>(); const outgoing = new Map<string,string[]>();
+  for (const edge of edges) { incoming.set(edge.to,[...(incoming.get(edge.to)||[]),edge.from]); outgoing.set(edge.from,[...(outgoing.get(edge.from)||[]),edge.to]); }
+  const activePorts = new Set(active.filter(incident => incident.monitorId === incident.ruleId.replace(/^system-/, 'system/')).map(incident => portIncidents.get(incident.ruleId)).filter((id):id is string => !!id));
   const assignments = new Map<string,{incidents:typeof active;distances:number[]}>();
   for (const incident of active) {
+    const portId = incident.monitorId === incident.ruleId.replace(/^system-/, 'system/') ? portIncidents.get(incident.ruleId) : undefined;
+    if (portId) { const group=assignments.get(portId)||{incidents:[],distances:[]}; group.incidents.push(incident); group.distances.push(0); assignments.set(portId,group); continue; }
     const serviceId=`service/${incident.monitorId}`; const queue=[{id:serviceId,distance:0}]; const seen=new Set<string>(); const candidates:Array<{id:string,distance:number,score:number}>=[];
     if(!nodeMap.has(serviceId))continue;
-    while(queue.length){const current=queue.shift()!;if(seen.has(current.id))continue;seen.add(current.id);const node=nodeMap.get(current.id);if(current.distance>0&&node&&(node.health==='critical'||node.health==='warning'))candidates.push({id:node.id,distance:current.distance,score:(node.health==='critical'?60:35)+Math.max(0,20-current.distance*4)});for(const parent of incoming.get(current.id)||[])queue.push({id:parent,distance:current.distance+1});}
+    while(queue.length){const current=queue.shift()!;if(seen.has(current.id))continue;seen.add(current.id);const node=nodeMap.get(current.id);if(current.distance>0&&node&&(node.health==='critical'||node.health==='warning'||activePorts.has(node.id)))candidates.push({id:node.id,distance:current.distance,score:((activePorts.has(node.id)||node.health==='critical')?60:35)+Math.max(0,20-current.distance*4)});for(const parent of incoming.get(current.id)||[])queue.push({id:parent,distance:current.distance+1});}
     const best=candidates.sort((a,b)=>b.score-a.score)[0]||{id:serviceId,distance:0,score:35}; const group=assignments.get(best.id)||{incidents:[],distances:[]}; group.incidents.push(incident);group.distances.push(best.distance);assignments.set(best.id,group);
   }
-  return [...assignments.entries()].map(([rootNodeId,group])=>{const root=nodeMap.get(rootNodeId)!;const incidentNames=group.incidents.map(incident=>nodeMap.get(`service/${incident.monitorId}`)?.name||incident.monitorId);const confidence=Math.min(98,Math.round((root.type==='service'?45:72)+Math.max(0,group.incidents.length-1)*8));const severity:CorrelationGroup['severity']=group.incidents.some(incident=>incident.severity==='critical')?'critical':'warning';return { id:`correlation/${rootNodeId}`, rootNodeId, title: root.type==='service'?`${root.name} failure requires investigation`:`${root.name} is the probable root cause`, explanation: root.type==='service'?`No unhealthy upstream dependency was found, so Sentinel kept this as a service-level incident.`:`${root.name} is unhealthy and sits upstream of ${group.incidents.length} active incident${group.incidents.length===1?'':'s'}.`, confidence, severity, incidentIds:group.incidents.map(incident=>incident.id), affectedServices:incidentNames, evidence:[`${root.name}: ${root.state} / ${root.health}`,`${group.incidents.length} active incident${group.incidents.length===1?'':'s'} share this dependency`, `Shortest dependency distance: ${Math.min(...group.distances)} hop${Math.min(...group.distances)===1?'':'s'}`]};}).sort((a,b)=>b.confidence-a.confidence);
+  return [...assignments.entries()].map(([rootNodeId,group])=>{
+    const root=nodeMap.get(rootNodeId)!; const port=root.type==='network-interface';
+    const incidentNames=group.incidents.filter(incident=>nodeMap.has(`service/${incident.monitorId}`)).map(incident=>nodeMap.get(`service/${incident.monitorId}`)!.name);
+    const affected = new Set(incidentNames);
+    if (port) { const queue=[rootNodeId]; const seen=new Set<string>(); while(queue.length){const id=queue.shift()!;if(seen.has(id))continue;seen.add(id);const node=nodeMap.get(id);if(node && ['node','vm','lxc','docker-host','application','container','service','storage-appliance'].includes(node.type)) affected.add(node.name);for(const child of outgoing.get(id)||[])queue.push(child); } }
+    const confidence=Math.min(98,Math.round((root.type==='service'?45:72)+Math.max(0,group.incidents.length-1)*8));
+    const severity:CorrelationGroup['severity']=group.incidents.some(incident=>incident.severity==='critical')?'critical':'warning';
+    const direct=group.incidents.find(incident=>portIncidents.get(incident.ruleId)===rootNodeId);
+    return { id:`correlation/${rootNodeId}`, rootNodeId, title: port?`${root.name} has an active network incident`:root.type==='service'?`${root.name} failure requires investigation`:`${root.name} is the probable root cause`, explanation: port?`The interface has an active alert. The linked assets and services may be affected; check alternate paths and service health before attributing an outage.`:root.type==='service'?`No unhealthy upstream dependency was found, so Sentinel kept this as a service-level incident.`:`${root.name} is unhealthy and sits upstream of ${group.incidents.length} active incident${group.incidents.length===1?'':'s'}.`, confidence, severity, incidentIds:group.incidents.map(incident=>incident.id), affectedServices:[...affected].sort(), evidence:port?[direct?.summary || `${root.name}: ${root.state} / ${root.health}`,`${group.incidents.length} active incident${group.incidents.length===1?'':'s'} associated with this path`,`${affected.size} potentially affected linked asset${affected.size===1?'':'s'}`]:[`${root.name}: ${root.state} / ${root.health}`,`${group.incidents.length} active incident${group.incidents.length===1?'':'s'} share this dependency`, `Shortest dependency distance: ${Math.min(...group.distances)} hop${Math.min(...group.distances)===1?'':'s'}`]};
+  }).sort((a,b)=>b.confidence-a.confidence);
 }

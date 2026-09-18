@@ -490,3 +490,7 @@ The automation is disabled by default and never changes switch configuration. En
 ## Stage 29: network interface CMDB links
 
 Network interfaces now become configuration items with stable device ID and interface index identifiers. A switch or router contains its ports, and a port connects to a Proxmox node or storage appliance when its alias uniquely names that endpoint. The Network and Topology pages show discovered associations from the CMDB. Missing or ambiguous aliases remain unlinked for review; operators can add a `connected_to` relationship through the CMDB API. Discovery keeps ownership and criticality metadata, tracks stale interfaces, and removes outdated discovered network links after a complete poll. ServiceNow sync uses the generic CI class for interface records so a custom table is not required.
+
+## Stage 30: network incident correlations
+
+Active network interface incidents now join the Topology correlation view through their stable device ID and interface index. Sentinel traces CMDB connections from the affected port to Proxmox nodes, hosted workloads, and linked service monitors, and groups service incidents when the same interface is an unhealthy upstream dependency. The panel lists these as potentially affected assets; redundant links and independent workload failures require investigation before attributing an outage. Resolved alerts, retired ports, and ports without a visible topology connection do not form a correlation group. The matching remains valid while a newly opened network alert waits for the next CMDB health refresh.

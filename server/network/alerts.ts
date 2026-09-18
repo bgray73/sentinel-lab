@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { networkInterfaceIncidentKey } from "./identity.js";
 import type { MonitoringService } from "../monitoring/service.js";
 import type { Incident } from "../monitoring/types.js";
 import type {
@@ -108,7 +108,7 @@ export class NetworkAlertService {
       );
   }
   private key(item: NetworkInterface) {
-    return `network-interface-${createHash("sha256").update(`${item.deviceId}|${item.ifIndex}`).digest("hex").slice(0, 16)}`;
+    return networkInterfaceIncidentKey(item.deviceId, item.ifIndex);
   }
   private detail(item: NetworkInterface) {
     const reasons: string[] = [];
