@@ -4,6 +4,8 @@ export type TopologyNodeType = 'node' | 'vm' | 'lxc' | 'docker-host' | 'applicat
 export type TopologyHealth = 'healthy' | 'warning' | 'critical' | 'unknown';
 export type TopologyNode = { id: string; type: TopologyNodeType; name: string; state: string; health: TopologyHealth; source: 'proxmox' | 'docker' | 'monitoring' | 'hardware' | 'network'; detail?: string };
 export type TopologyEdge = { from: string; to: string; relation: 'contains' | 'hosts' | 'runs' | 'monitors' | 'connected_to'; inferred: boolean };
+export type TopologyImpactAsset = Pick<TopologyNode, 'id' | 'type' | 'name' | 'state' | 'health'> & { distance: number; path: string[]; inferred: boolean };
+export type TopologyImpactSummary = { total: number; nodes: number; workloads: number; applications: number; containers: number; services: number; unhealthy: number };
 export type CorrelationGroup = {
   id: string;
   rootNodeId: string;
@@ -13,6 +15,8 @@ export type CorrelationGroup = {
   severity: AlertSeverity;
   incidentIds: string[];
   affectedServices: string[];
+  affectedAssets: TopologyImpactAsset[];
+  impact: TopologyImpactSummary;
   evidence: string[];
 };
 export type TopologySnapshot = {

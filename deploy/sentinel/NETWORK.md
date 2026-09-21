@@ -70,3 +70,5 @@ Before enabling it, confirm that unused ports are administratively down, aliases
 ## CMDB links
 
 Stage 29 reconciles each network port as a `network_interface` CI. The switch/router device contains the interface. An alias such as `pve-01 40G uplink` links to a uniquely named `pve-01` Proxmox node; aliases that contain two endpoint names or no exact endpoint name remain unlinked. Use the CMDB relationship API to record verified connections where aliases are missing. Discovered network relationships are refreshed after a complete poll, while operator-created relationships remain intact. An incomplete poll retains the previous inferred links until the next complete reconciliation.
+
+Stage 31 exposes the downstream blast radius for an active interface incident in `GET /api/topology`. Each correlation includes `affectedAssets` with the asset ID, type, health, hop distance, full path, and whether the path contains an inferred relationship, plus an `impact` count by resource category. Treat this as a dependency assessment rather than proof of outage; confirm redundant uplinks and service checks before escalating the port as the root cause.
