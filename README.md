@@ -494,3 +494,9 @@ Network interfaces now become configuration items with stable device ID and inte
 ## Stage 30: network incident correlations
 
 Active network interface incidents now join the Topology correlation view through their stable device ID and interface index. Sentinel traces CMDB connections from the affected port to Proxmox nodes, hosted workloads, and linked service monitors, and groups service incidents when the same interface is an unhealthy upstream dependency. The panel lists these as potentially affected assets; redundant links and independent workload failures require investigation before attributing an outage. Resolved alerts, retired ports, and ports without a visible topology connection do not form a correlation group. The matching remains valid while a newly opened network alert waits for the next CMDB health refresh.
+
+## Stage 31: dependency blast radius
+
+Each incident correlation now includes a structured blast radius instead of a flat list of names. The Topology API returns every downstream asset with its stable ID, type, current state, health, shortest hop distance, complete dependency path, and whether any relationship in that path was inferred. It also summarizes affected nodes, workloads, applications, containers, services, and unhealthy assets for dashboards and automation clients.
+
+The Topology page presents those counts and assets directly on each correlation card. Impact remains advisory: the graph proves a known dependency path, not that every linked asset is unavailable. Operators should confirm redundant links and current service health before assigning the network event as the root cause.

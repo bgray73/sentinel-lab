@@ -44,8 +44,12 @@ describe('dependency topology and correlation',()=>{
     const snapshot=buildTopology(simulatedInventory(),simulatedDockerInventory(),monitors,{mappings:[{id:'m1',monitorId:'monitor-dns',resourceId:'node/pve-01',createdAt:stamp}],incidents:[portIncident()]},networkGraph());
     expect(snapshot.correlations).toHaveLength(1);
     expect(snapshot.correlations[0]).toMatchObject({rootNodeId:'interface/nexus-core-01/1',incidentIds:['port-alert'],severity:'critical'});
-    expect(snapshot.correlations[0].affectedServices).toContain('pve-01');
     expect(snapshot.correlations[0].affectedServices).toContain('Lab DNS resolution');
+    expect(snapshot.correlations[0].affectedAssets).toEqual(expect.arrayContaining([
+      expect.objectContaining({id:'node/pve-01',type:'node',name:'pve-01',distance:1,path:['interface/nexus-core-01/1','node/pve-01'],inferred:true}),
+      expect.objectContaining({id:'service/monitor-dns',type:'service',distance:2,path:['interface/nexus-core-01/1','node/pve-01','service/monitor-dns'],inferred:true}),
+    ]));
+    expect(snapshot.correlations[0].impact).toMatchObject({nodes:1,services:1,total:expect.any(Number)});
     expect(snapshot.correlations[0].explanation).toContain('may be affected');
     expect(snapshot.correlations[0].evidence).toContain('Operational state is down');
   });
@@ -54,6 +58,7 @@ describe('dependency topology and correlation',()=>{
     const snapshot=buildTopology(simulatedInventory(),simulatedDockerInventory(),monitors,{mappings:[{id:'m1',monitorId:'monitor-dns',resourceId:'node/pve-01',createdAt:stamp}],incidents:[portIncident(),serviceIncident]},networkGraph());
     expect(snapshot.correlations).toHaveLength(1);
     expect(snapshot.correlations[0].incidentIds).toEqual(expect.arrayContaining(['port-alert','dns-alert']));
+    expect(snapshot.correlations[0].impact.services).toBe(1);
   });
   it('does not attach unmatched, resolved, or disconnected network alerts to the graph',()=>{
     const graph=networkGraph('critical');

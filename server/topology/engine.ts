@@ -4,7 +4,7 @@ import type { ProxmoxInventory } from '../proxmox/types.js';
 import type { CmdbRelationship, ConfigurationItem } from '../cmdb/types.js';
 import { networkInterfaceIncidentKey } from '../network/identity.js';
 import { networkTopology } from './network.js';
-import type { CorrelationGroup, CorrelationInput, TopologyEdge, TopologyHealth, TopologyNode, TopologySnapshot } from './types.js';
+import type { CorrelationGroup, CorrelationInput, TopologyEdge, TopologyHealth, TopologyImpactAsset, TopologyNode, TopologySnapshot } from './types.js';
 
 function workloadHealth(state: string, health: TopologyHealth): TopologyHealth { return ['stopped','dead','exited','offline'].includes(state.toLowerCase()) ? 'critical' : health; }
 function words(value: string) { return value.toLowerCase().split(/[^a-z0-9]+/).filter(word => word.length > 2); }
@@ -59,8 +59,8 @@ export function buildTopology(proxmox: ProxmoxInventory, docker: DockerInventory
 
 function correlate(nodes: TopologyNode[], edges: TopologyEdge[], incidents: CorrelationInput['incidents'], portIncidents: Map<string,string>): CorrelationGroup[] {
   const active = incidents.filter(incident=>incident.status!=='resolved'); if (!active.length) return [];
-  const nodeMap = new Map(nodes.map(node=>[node.id,node])); const incoming = new Map<string,string[]>(); const outgoing = new Map<string,string[]>();
-  for (const edge of edges) { incoming.set(edge.to,[...(incoming.get(edge.to)||[]),edge.from]); outgoing.set(edge.from,[...(outgoing.get(edge.from)||[]),edge.to]); }
+  const nodeMap = new Map(nodes.map(node=>[node.id,node])); const incoming = new Map<string,string[]>(); const outgoing = new Map<string,TopologyEdge[]>();
+  for (const edge of edges) { incoming.set(edge.to,[...(incoming.get(edge.to)||[]),edge.from]); outgoing.set(edge.from,[...(outgoing.get(edge.from)||[]),edge]); }
   const activePorts = new Set(active.filter(incident => incident.monitorId === incident.ruleId.replace(/^system-/, 'system/')).map(incident => portIncidents.get(incident.ruleId)).filter((id):id is string => !!id));
   const assignments = new Map<string,{incidents:typeof active;distances:number[]}>();
   for (const incident of active) {
@@ -74,11 +74,26 @@ function correlate(nodes: TopologyNode[], edges: TopologyEdge[], incidents: Corr
   return [...assignments.entries()].map(([rootNodeId,group])=>{
     const root=nodeMap.get(rootNodeId)!; const port=root.type==='network-interface';
     const incidentNames=group.incidents.filter(incident=>nodeMap.has(`service/${incident.monitorId}`)).map(incident=>nodeMap.get(`service/${incident.monitorId}`)!.name);
-    const affected = new Set(incidentNames);
-    if (port) { const queue=[rootNodeId]; const seen=new Set<string>(); while(queue.length){const id=queue.shift()!;if(seen.has(id))continue;seen.add(id);const node=nodeMap.get(id);if(node && ['node','vm','lxc','docker-host','application','container','service','storage-appliance'].includes(node.type)) affected.add(node.name);for(const child of outgoing.get(id)||[])queue.push(child); } }
+    const affectedAssets = downstreamImpact(rootNodeId, nodeMap, outgoing);
+    const affectedServices = [...new Set([...incidentNames,...affectedAssets.filter(asset=>asset.type==='service').map(asset=>asset.name)])].sort();
+    const impact = { total: affectedAssets.length, nodes: countTypes(affectedAssets,['node','storage-appliance']), workloads: countTypes(affectedAssets,['vm','lxc','docker-host']), applications: countTypes(affectedAssets,['application']), containers: countTypes(affectedAssets,['container']), services: countTypes(affectedAssets,['service']), unhealthy: affectedAssets.filter(asset=>asset.health==='critical'||asset.health==='warning').length };
     const confidence=Math.min(98,Math.round((root.type==='service'?45:72)+Math.max(0,group.incidents.length-1)*8));
     const severity:CorrelationGroup['severity']=group.incidents.some(incident=>incident.severity==='critical')?'critical':'warning';
     const direct=group.incidents.find(incident=>portIncidents.get(incident.ruleId)===rootNodeId);
-    return { id:`correlation/${rootNodeId}`, rootNodeId, title: port?`${root.name} has an active network incident`:root.type==='service'?`${root.name} failure requires investigation`:`${root.name} is the probable root cause`, explanation: port?`The interface has an active alert. The linked assets and services may be affected; check alternate paths and service health before attributing an outage.`:root.type==='service'?`No unhealthy upstream dependency was found, so Sentinel kept this as a service-level incident.`:`${root.name} is unhealthy and sits upstream of ${group.incidents.length} active incident${group.incidents.length===1?'':'s'}.`, confidence, severity, incidentIds:group.incidents.map(incident=>incident.id), affectedServices:[...affected].sort(), evidence:port?[direct?.summary || `${root.name}: ${root.state} / ${root.health}`,`${group.incidents.length} active incident${group.incidents.length===1?'':'s'} associated with this path`,`${affected.size} potentially affected linked asset${affected.size===1?'':'s'}`]:[`${root.name}: ${root.state} / ${root.health}`,`${group.incidents.length} active incident${group.incidents.length===1?'':'s'} share this dependency`, `Shortest dependency distance: ${Math.min(...group.distances)} hop${Math.min(...group.distances)===1?'':'s'}`]};
+    return { id:`correlation/${rootNodeId}`, rootNodeId, title: port?`${root.name} has an active network incident`:root.type==='service'?`${root.name} failure requires investigation`:`${root.name} is the probable root cause`, explanation: port?`The interface has an active alert. The linked assets and services may be affected; check alternate paths and service health before attributing an outage.`:root.type==='service'?`No unhealthy upstream dependency was found, so Sentinel kept this as a service-level incident.`:`${root.name} is unhealthy and sits upstream of ${group.incidents.length} active incident${group.incidents.length===1?'':'s'}.`, confidence, severity, incidentIds:group.incidents.map(incident=>incident.id), affectedServices, affectedAssets, impact, evidence:port?[direct?.summary || `${root.name}: ${root.state} / ${root.health}`,`${group.incidents.length} active incident${group.incidents.length===1?'':'s'} associated with this path`,`${impact.total} potentially affected linked asset${impact.total===1?'':'s'}`]:[`${root.name}: ${root.state} / ${root.health}`,`${group.incidents.length} active incident${group.incidents.length===1?'':'s'} share this dependency`, `Shortest dependency distance: ${Math.min(...group.distances)} hop${Math.min(...group.distances)===1?'':'s'}`]};
   }).sort((a,b)=>b.confidence-a.confidence);
 }
+
+function downstreamImpact(rootNodeId: string, nodes: Map<string,TopologyNode>, outgoing: Map<string,TopologyEdge[]>): TopologyImpactAsset[] {
+  const queue = (outgoing.get(rootNodeId)||[]).map(edge=>({id:edge.to,distance:1,path:[rootNodeId,edge.to],inferred:edge.inferred}));
+  const best = new Map<string,TopologyImpactAsset>();
+  while(queue.length) {
+    const current=queue.shift()!; if(current.id===rootNodeId||best.has(current.id))continue;
+    const node=nodes.get(current.id); if(!node)continue;
+    best.set(node.id,{id:node.id,type:node.type,name:node.name,state:node.state,health:node.health,distance:current.distance,path:current.path,inferred:current.inferred});
+    for(const edge of outgoing.get(current.id)||[]) if(!best.has(edge.to)) queue.push({id:edge.to,distance:current.distance+1,path:[...current.path,edge.to],inferred:current.inferred||edge.inferred});
+  }
+  return [...best.values()].sort((a,b)=>a.distance-b.distance||a.type.localeCompare(b.type)||a.name.localeCompare(b.name));
+}
+
+function countTypes(assets: TopologyImpactAsset[], types: TopologyNode['type'][]) { return assets.filter(asset=>types.includes(asset.type)).length; }
