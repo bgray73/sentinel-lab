@@ -4,6 +4,7 @@ import type { ProxmoxInventory } from '../proxmox/types.js';
 import type { CmdbRelationship, ConfigurationItem } from '../cmdb/types.js';
 import { networkInterfaceIncidentKey } from '../network/identity.js';
 import { networkTopology } from './network.js';
+import { downstreamImpact } from './impact.js';
 import type { CorrelationGroup, CorrelationInput, TopologyEdge, TopologyHealth, TopologyImpactAsset, TopologyNode, TopologySnapshot } from './types.js';
 
 function workloadHealth(state: string, health: TopologyHealth): TopologyHealth { return ['stopped','dead','exited','offline'].includes(state.toLowerCase()) ? 'critical' : health; }
@@ -82,18 +83,6 @@ function correlate(nodes: TopologyNode[], edges: TopologyEdge[], incidents: Corr
     const direct=group.incidents.find(incident=>portIncidents.get(incident.ruleId)===rootNodeId);
     return { id:`correlation/${rootNodeId}`, rootNodeId, title: port?`${root.name} has an active network incident`:root.type==='service'?`${root.name} failure requires investigation`:`${root.name} is the probable root cause`, explanation: port?`The interface has an active alert. The linked assets and services may be affected; check alternate paths and service health before attributing an outage.`:root.type==='service'?`No unhealthy upstream dependency was found, so Sentinel kept this as a service-level incident.`:`${root.name} is unhealthy and sits upstream of ${group.incidents.length} active incident${group.incidents.length===1?'':'s'}.`, confidence, severity, incidentIds:group.incidents.map(incident=>incident.id), affectedServices, affectedAssets, impact, evidence:port?[direct?.summary || `${root.name}: ${root.state} / ${root.health}`,`${group.incidents.length} active incident${group.incidents.length===1?'':'s'} associated with this path`,`${impact.total} potentially affected linked asset${impact.total===1?'':'s'}`]:[`${root.name}: ${root.state} / ${root.health}`,`${group.incidents.length} active incident${group.incidents.length===1?'':'s'} share this dependency`, `Shortest dependency distance: ${Math.min(...group.distances)} hop${Math.min(...group.distances)===1?'':'s'}`]};
   }).sort((a,b)=>b.confidence-a.confidence);
-}
-
-function downstreamImpact(rootNodeId: string, nodes: Map<string,TopologyNode>, outgoing: Map<string,TopologyEdge[]>): TopologyImpactAsset[] {
-  const queue = (outgoing.get(rootNodeId)||[]).map(edge=>({id:edge.to,distance:1,path:[rootNodeId,edge.to],inferred:edge.inferred}));
-  const best = new Map<string,TopologyImpactAsset>();
-  while(queue.length) {
-    const current=queue.shift()!; if(current.id===rootNodeId||best.has(current.id))continue;
-    const node=nodes.get(current.id); if(!node)continue;
-    best.set(node.id,{id:node.id,type:node.type,name:node.name,state:node.state,health:node.health,distance:current.distance,path:current.path,inferred:current.inferred});
-    for(const edge of outgoing.get(current.id)||[]) if(!best.has(edge.to)) queue.push({id:edge.to,distance:current.distance+1,path:[...current.path,edge.to],inferred:current.inferred||edge.inferred});
-  }
-  return [...best.values()].sort((a,b)=>a.distance-b.distance||a.type.localeCompare(b.type)||a.name.localeCompare(b.name));
 }
 
 function countTypes(assets: TopologyImpactAsset[], types: TopologyNode['type'][]) { return assets.filter(asset=>types.includes(asset.type)).length; }
