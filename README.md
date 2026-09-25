@@ -500,3 +500,9 @@ Active network interface incidents now join the Topology correlation view throug
 Each incident correlation now includes a structured blast radius instead of a flat list of names. The Topology API returns every downstream asset with its stable ID, type, current state, health, shortest hop distance, complete dependency path, and whether any relationship in that path was inferred. It also summarizes affected nodes, workloads, applications, containers, services, and unhealthy assets for dashboards and automation clients.
 
 The Topology page presents those counts and assets directly on each correlation card. Impact remains advisory: the graph proves a known dependency path, not that every linked asset is unavailable. Operators should confirm redundant links and current service health before assigning the network event as the root cause.
+
+## Stage 32: dependency path reliability
+
+Blast-radius paths no longer depend on discovery order. Sentinel still selects the shortest directed path; when equally short routes exist, a fully confirmed path takes priority over one containing inferred relationships. Stable asset IDs resolve remaining ties. The chosen path's inferred status propagates to downstream assets.
+
+Cycle, self-link, duplicate-edge, missing-asset, and duplicate-name tests protect the impact calculation. Missing assets are not traversed, and the starting component is never counted as its own downstream impact. This remains an advisory dependency view, not a routing or failover test: a second path does not prove working redundancy.
