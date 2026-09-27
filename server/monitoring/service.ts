@@ -2,6 +2,7 @@ import path from 'node:path';
 import { calculateHealth, runMonitorCheck } from './checks.js';
 import { buildMetrics, isMetricRange, prometheusMetrics } from '../metrics/analytics.js';
 import { NotificationDispatcher } from './notifications.js';
+import { JevIncidentTriage } from './jev.js';
 import { MonitoringStore } from './store.js';
 import type { AlertRule, AlertSeverity, DependencyMapping, Incident, MetricRange, Monitor, MonitoringData, MonitorProtocol, MonitorResult, MonitorView, NotificationDelivery, RetentionPolicy } from './types.js';
 
@@ -18,11 +19,13 @@ export class MonitoringService {
   private readonly simulate: boolean;
   private readonly store: MonitoringStore;
   private readonly notifications: NotificationDispatcher;
+  private readonly jev: JevIncidentTriage;
 
   constructor(env: NodeJS.ProcessEnv = process.env) {
     this.simulate = env.SENTINEL_REAL_CHECKS !== 'true';
     this.store = new MonitoringStore(env.SENTINEL_DATA_FILE || path.resolve('.sentinel/monitoring.json'));
     this.notifications = new NotificationDispatcher(env);
+    this.jev = new JevIncidentTriage(env);
     this.ready = this.initialize();
   }
   private async initialize() {
@@ -115,7 +118,7 @@ export class MonitoringService {
     }
     const severity:AlertSeverity=input.state==='not-ready'?'critical':'warning',title=input.title||(input.state==='not-ready'?'Disaster recovery is not ready':'Disaster recovery is at risk');
     if(existing){existing.severity=severity;existing.title=title;existing.summary=input.summary;existing.occurrences+=1;existing.updatedAt=now;const last=existing.lastNotificationAt?new Date(existing.lastNotificationAt).getTime():0;if(Date.now()-last>=input.cooldownSeconds*1_000)await this.notify(existing,'reminder');await this.store.save(this.data);return existing}
-    const incident:Incident={id:`incident-${crypto.randomUUID()}`,ruleId,monitorId,title,summary:input.summary,severity,status:'open',occurrences:1,openedAt:now,updatedAt:now};this.data.incidents.unshift(incident);await this.notify(incident,'opened');await this.store.save(this.data);return incident;
+    const incident:Incident={id:`incident-${crypto.randomUUID()}`,ruleId,monitorId,title,summary:input.summary,severity,status:'open',occurrences:1,openedAt:now,updatedAt:now};this.data.incidents.unshift(incident);incident.jevTriage=await this.jev.evaluate(incident);await this.notify(incident,'opened');await this.store.save(this.data);return incident;
   }
   async suppressAlert(id: string, minutes: number) {
     const rule = this.data.alertRules.find(item => item.id === id); if (!rule) throw new Error('Alert rule not found');
@@ -148,7 +151,7 @@ export class MonitoringService {
       } else {
         const monitor = this.data.monitors.find(item => item.id === result.monitorId);
         const incident: Incident = { id: `incident-${crypto.randomUUID()}`, ruleId: rule.id, monitorId: result.monitorId, title: `${monitor?.name || result.monitorId} is down`, summary: `${failureCount} consecutive checks failed. Latest result: ${result.detail}`, severity: rule.severity, status: 'open', occurrences: 1, openedAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
-        this.data.incidents.unshift(incident); await this.notify(incident, 'opened');
+        this.data.incidents.unshift(incident); incident.jevTriage = await this.jev.evaluate(incident); await this.notify(incident, 'opened');
       }
     }
   }

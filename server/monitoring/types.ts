@@ -31,6 +31,7 @@ export type AlertRule = {
   suppressedUntil?: string;
   createdAt: string;
 };
+import type { JevTriage } from './jev.js';
 export type Incident = {
   id: string;
   ruleId: string;
@@ -45,6 +46,7 @@ export type Incident = {
   acknowledgedAt?: string;
   resolvedAt?: string;
   lastNotificationAt?: string;
+  jevTriage?: JevTriage;
   externalTicket?: { provider: 'servicenow'; id: string; number: string; url?: string; updatedAt: string };
 };
 export type NotificationChannel = 'webhook' | 'slack' | 'teams' | 'email' | 'servicenow' | 'simulation';

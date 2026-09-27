@@ -8,3 +8,4 @@ server-dist
 data/*.db
 data/*.db-*
 deploy/observability/.env
+deploy/sentinel/.env
