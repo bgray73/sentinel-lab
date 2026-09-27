@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { JevTriage } from './JevTriage';
 import { Activity, Bell, BrainCircuit, Braces, Box, Boxes, Cable, Check, ChevronDown, CircleAlert, Database, Gauge, GitBranch, Globe2, HardDrive, LayoutDashboard, LineChart, Link2, Menu, Network, Play, Plus, Radio, RefreshCw, Search, Server, Settings, ShieldCheck, Timer, Trash2, UserRound, Workflow, X } from 'lucide-react';
 import { formatBytes, groupInventory, percent } from './inventory';
 import './automation.css';
@@ -357,6 +358,7 @@ function AlertsDashboard({data,incidents,monitors,loading,error,acknowledge,supp
   const monitorName = (id:string) => monitors.find(monitor=>monitor.id===id)?.name || id;
   async function act(id:string,action:()=>Promise<void>) { setBusy(id); setActionError(''); try { await action(); } catch(value) { setActionError(value instanceof Error?value.message:'Alert action failed'); } finally { setBusy(''); } }
   return <section className="content infrastructure-content alerts-content">
+    <JevTriage incidents={incidents}/>
     <div className="inventory-banner alerts-banner"><div><span className={`source-badge ${data.notifications.mode==='live'?'proxmox':'simulation'}`}>{data.notifications.mode==='live'?'LIVE DELIVERY':'SIMULATION'}</span><strong>Incident response</strong><p>{data.notifications.mode==='live'?'Notifications are enabled for configured channels.':'Notifications are recorded but not sent. Enable real delivery after configuring a channel.'}</p></div><div className="notification-channels"><span className={data.notifications.webhookConfigured?'configured':''}>Webhook {data.notifications.webhookConfigured?'ready':'not set'}</span><span className={data.notifications.emailConfigured?'configured':''}>Email {data.notifications.emailConfigured?'ready':'not set'}</span></div></div>
     {(error||actionError)&&<div className="inline-error"><CircleAlert size={15}/>{actionError||error}</div>}
     <div className="metric-grid inventory-metrics"><Metric label="Active incidents" value={String(active.length)} detail={active.length?'Response required':'No active incidents'} icon={Bell} tone={active.length?'bad':'good'}/><Metric label="Critical" value={String(critical)} detail="Release and service impact" icon={CircleAlert} tone={critical?'bad':'good'}/><Metric label="Acknowledged" value={String(acknowledged)} detail="Owned by an operator" icon={Check}/><Metric label="Suppressed rules" value={String(suppressed)} detail="Temporary maintenance windows" icon={Timer}/></div>

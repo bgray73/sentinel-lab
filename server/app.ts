@@ -1,4 +1,5 @@
 import express from 'express';
+import { registerJevRoutes } from './integrations/jev-routes.js';
 import { timingSafeEqual } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -58,6 +59,7 @@ export function createApp(store: Store, monitoring?: MonitoringService, telemetr
   app.get('/api/health', (_req, res) => res.json({ status: 'ok', service: 'sentinel-api' }));
   app.use(authenticate(auth, log, security));
   app.use(authorize(log, security));
+  registerJevRoutes(app, monitoring);
   app.get('/api/session', (_req, res) => res.json(session(auth, res.locals.identity as Identity)));
   app.get('/api/security/events', async (req, res) => {
     const types = new Set(['session_authenticated', 'authentication_failed', 'authorization_denied']);

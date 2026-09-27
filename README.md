@@ -506,3 +506,11 @@ The Topology page presents those counts and assets directly on each correlation 
 Blast-radius paths no longer depend on discovery order. Sentinel still selects the shortest directed path; when equally short routes exist, a fully confirmed path takes priority over one containing inferred relationships. Stable asset IDs resolve remaining ties. The chosen path's inferred status propagates to downstream assets.
 
 Cycle, self-link, duplicate-edge, missing-asset, and duplicate-name tests protect the impact calculation. Missing assets are not traversed, and the starting component is never counted as its own downstream impact. This remains an advisory dependency view, not a routing or failover test: a second path does not prove working redundancy.
+
+## Stage 33: optional Jev-assisted incident triage
+
+The Alerts page now offers an administrator-only **Analyze with Jev** action for active incidents. The default simulation makes no external call and does not invent a model confidence value. Live mode requires both `SENTINEL_REAL_JEV=true` and a server-side TypeSafe API key.
+
+The initial integration classifies incident domains using a strict allowlist of status fields. It sends no free text, names, addresses, targets, credentials, or raw logs. Ambiguous or low-confidence answers appear as insufficient evidence, and all suggestions require human review. It does not yet rank topology root-cause candidates. Monitoring, incident state, alert delivery, and infrastructure are never changed by Jev.
+
+Requests are manual, rate-limited, timed out, and validated. See [the Jev runbook](deploy/sentinel/JEV.md) for setup, external-data disclosure, API endpoints, and limitations. Live provider access is not exercised by CI.
