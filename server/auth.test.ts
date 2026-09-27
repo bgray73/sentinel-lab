@@ -88,6 +88,17 @@ describe('authentication and authorization', () => {
     expect((await fetch(`${base}/api/collectors`, { method: 'POST', headers: admin })).status).toBe(503);
   });
 
+  it('restricts Jev outbound analysis to administrators', async () => {
+    const base = await start(config);
+    const path = `${base}/api/integrations/jev/incidents/example/analyze`;
+    expect((await fetch(path, {method:'POST',headers:proxyHeaders('viewer','everyone')})).status).toBe(403);
+    expect((await fetch(path, {method:'POST',headers:proxyHeaders('operator','operators')})).status).toBe(403);
+    expect((await fetch(path, {method:'POST',headers:proxyHeaders('admin','admins')})).status).toBe(503);
+    const status = await fetch(`${base}/api/integrations/jev`, {headers:proxyHeaders('viewer','everyone')});
+    expect(status.status).toBe(200);
+    expect(JSON.stringify(await status.json())).not.toContain('test-key');
+  });
+
   async function start(auth: AuthConfig) {
     store = new Store(':memory:');
     server = createApp(store, undefined, undefined, undefined, undefined, undefined, new StructuredLogger(() => {}), auth, new SecurityAuditService({}, false)).listen(0, '127.0.0.1');
