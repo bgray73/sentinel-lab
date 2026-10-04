@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { Incident } from './types';
 
-type Result = { incidentId: string; mode: string; category: string; confidence: number | null; analyzedAt: string };
+type Result = { incidentId: string; mode: string; category: string; confidence: number | null; analyzedAt: string; dependencies?: { availability:string; truncated:boolean; resources:{type:string;healthy:number;warning:number;critical:number;unknown:number}[] } };
 export function JevTriage({ incidents }: { incidents: Incident[] }) {
   const [status, setStatus] = useState<{ mode: string; configured: boolean; payload: string } | null>(null);
   const [admin, setAdmin] = useState(false);
@@ -30,6 +30,7 @@ export function JevTriage({ incidents }: { incidents: Incident[] }) {
     {!admin && <p>Administrator access is required to request analysis.</p>}
     {status && !status.configured && <p>Configure the server-side TypeSafe API key before requesting live analysis.</p>}
     {error && <p role="alert">{error}</p>}
+    {result?.dependencies && <details><summary>Dependency evidence: {result.dependencies.availability.replaceAll('_',' ')}</summary><p>CMDB snapshots are evidence for investigation, not proof of a root cause. Unknown health does not mean healthy.</p>{result.dependencies.truncated && <p>Limited to 100 dependencies; evidence is incomplete.</p>}<ul>{result.dependencies.resources.map(item=><li key={item.type}>{item.type.replaceAll('_',' ')}: {item.healthy} healthy, {item.warning} warning, {item.critical} critical, {item.unknown} unknown</li>)}</ul></details>}
     {result && <div role="status"><strong>{result.mode === 'simulation' ? 'SIMULATED — no provider request' : 'Jev suggestion'}: {result.category.replaceAll('_',' ')}</strong><p>{result.confidence === null ? 'Demo only; no model confidence.' : `Model confidence: ${Math.round(result.confidence*100)}% — not a guarantee of correctness.`} Human review required. Analyzed {new Date(result.analyzedAt).toLocaleString()}.</p></div>}
   </section>;
 }

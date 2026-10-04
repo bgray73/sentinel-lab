@@ -1,9 +1,10 @@
 import { secretFromEnvironment } from '../config/secrets.js';
 import type { Incident, MonitorView } from '../monitoring/types.js';
+import { dependencyEvidence, type DependencyContext } from './jev-evidence.js';
 
 const categories = ['network', 'storage', 'compute', 'application', 'insufficient_evidence'] as const;
 type Category = typeof categories[number];
-export type JevResult = { mode: 'simulation' | 'live'; category: Category; confidence: number | null; reviewRequired: true; analyzedAt: string; incidentId: string };
+export type JevResult = { mode: 'simulation' | 'live'; category: Category; confidence: number | null; reviewRequired: true; analyzedAt: string; incidentId: string; dependencies?: ReturnType<typeof dependencyEvidence> };
 
 // Deliberate allowlist: never send names, targets, IDs, titles, summaries,
 // credentials, raw logs, or arbitrary user-provided text to the external model.
@@ -21,22 +22,25 @@ export function jevEvidence(incident: Incident, monitor?: MonitorView) {
 export class JevService {
   private readonly live: boolean;
   private readonly key: string;
+  readonly includeDependencies: boolean;
   private nextRequestAt = 0;
   private busy = false;
 
   constructor(env: NodeJS.ProcessEnv = process.env, private readonly fetcher: typeof fetch = fetch) {
     this.live = env.SENTINEL_REAL_JEV === 'true';
+    this.includeDependencies = env.SENTINEL_JEV_DEPENDENCIES === 'true';
     // An unreadable optional integration secret must not stop monitoring startup.
     try { this.key = this.live ? secretFromEnvironment(env, 'TYPESAFE_API_KEY') || '' : ''; }
     catch { this.key = ''; }
   }
 
-  status() { return { mode: this.live ? 'live' : 'simulation', configured: !this.live || !!this.key, minimumIntervalSeconds: 30, payload: 'Incident source, severity, lifecycle status, protocol, and latest check status only. No free text or raw logs.' }; }
+  status() { return { mode: this.live ? 'live' : 'simulation', configured: !this.live || !!this.key, includeDependencies: this.includeDependencies, minimumIntervalSeconds: 30, payload: `Incident source, severity, lifecycle status, protocol, and latest check status.${this.includeDependencies ? ' Mapped dependency types and health counts are also included when current and mode-matched.' : ''} No free text, names, addresses or raw logs.` }; }
 
-  async analyze(incident: Incident, monitor?: MonitorView): Promise<JevResult> {
+  async analyze(incident: Incident, monitor?: MonitorView, context?: DependencyContext): Promise<JevResult> {
     if (incident.status === 'resolved') throw new Error('Select an active incident');
-    const evidence = jevEvidence(incident, monitor);
-    const base = { incidentId: incident.id, analyzedAt: new Date().toISOString(), reviewRequired: true as const };
+    const dependencies = this.includeDependencies ? dependencyEvidence(incident, context) : undefined;
+    const evidence = { ...jevEvidence(incident, monitor), ...(dependencies ? {dependencies} : {}) };
+    const base = { incidentId: incident.id, analyzedAt: new Date().toISOString(), reviewRequired: true as const, ...(dependencies ? {dependencies} : {}) };
     if (!this.live) return { ...base, mode: 'simulation', category: 'insufficient_evidence', confidence: null };
     if (!this.key) throw new Error('Jev is enabled but its server-side API key is not configured');
     if (this.busy || Date.now() < this.nextRequestAt) throw new Error('Wait 30 seconds between Jev requests');
