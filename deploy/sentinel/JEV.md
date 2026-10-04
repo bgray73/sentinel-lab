@@ -54,3 +54,22 @@ Client-supplied prompts or evidence are not accepted. Disable by unsetting
 `SENTINEL_REAL_JEV` or setting it to `false`, then restart.
 
 Official contract: https://docs.typesafe.ai/introduction/quickstart
+
+## Stage 34: optional dependency evidence
+
+Set `SENTINEL_JEV_DEPENDENCIES=true` to include grouped CMDB resource types and
+health counts in manual analysis. This expands external disclosure only when
+explicitly enabled. The default request remains unchanged. The Alerts result
+shows the included counts or why they were excluded, in simulation and live mode.
+
+Only active CIs linked by saved monitor mappings and their upstream hosts,
+containers, discovered Docker hosting links, and interface connections qualify.
+No name-based inference is used. CMDB and monitoring modes must match, discovery
+must have succeeded, and the snapshot must be at most ten minutes old. Missing
+health stays unknown; stopped/offline/down resources count as critical. Names,
+IDs, addresses, free text and arbitrary attributes are never sent. Traversal is
+cycle-safe and limited to 100 unique resources, with truncation disclosed.
+
+Unmapped system incidents currently have no dependency summary. This is grouped
+context for incident classification; individual root-cause ranking and operational
+failover verification remain outside this feature.

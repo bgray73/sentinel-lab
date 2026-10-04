@@ -59,7 +59,7 @@ export function createApp(store: Store, monitoring?: MonitoringService, telemetr
   app.get('/api/health', (_req, res) => res.json({ status: 'ok', service: 'sentinel-api' }));
   app.use(authenticate(auth, log, security));
   app.use(authorize(log, security));
-  registerJevRoutes(app, monitoring);
+  registerJevRoutes(app, monitoring, undefined, cmdb);
   app.get('/api/session', (_req, res) => res.json(session(auth, res.locals.identity as Identity)));
   app.get('/api/security/events', async (req, res) => {
     const types = new Set(['session_authenticated', 'authentication_failed', 'authorization_denied']);

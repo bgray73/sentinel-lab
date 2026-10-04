@@ -514,3 +514,7 @@ The Alerts page now offers an administrator-only **Analyze with Jev** action for
 The initial integration classifies incident domains using a strict allowlist of status fields. It sends no free text, names, addresses, targets, credentials, or raw logs. Ambiguous or low-confidence answers appear as insufficient evidence, and all suggestions require human review. It does not yet rank topology root-cause candidates. Monitoring, incident state, alert delivery, and infrastructure are never changed by Jev.
 
 Requests are manual, rate-limited, timed out, and validated. See [the Jev runbook](deploy/sentinel/JEV.md) for setup, external-data disclosure, API endpoints, and limitations. Live provider access is not exercised by CI.
+
+## Stage 34: Jev dependency evidence
+
+Optional `SENTINEL_JEV_DEPENDENCIES=true` enriches incident classification with mapped upstream CMDB resource types and health counts. Stale, failed, mismatched-mode, retired, and unrelated records are excluded. Unknown health remains explicit, cycles are handled, and a 100-resource limit bounds the summary. The Alerts result shows which evidence was included or why it was unavailable. The feature defaults off and sends no names, addresses, identifiers, or raw logs. Individual root-cause ranking remains a future enhancement.
