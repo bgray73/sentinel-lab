@@ -499,6 +499,12 @@ Active network interface incidents now join the Topology correlation view throug
 
 Each incident correlation now includes a structured blast radius instead of a flat list of names. The Topology API returns every downstream asset with its stable ID, type, current state, health, shortest hop distance, complete dependency path, and whether any relationship in that path was inferred. It also summarizes affected nodes, workloads, applications, containers, services, and unhealthy assets for dashboards and automation clients.
 
+## Optional Jev incident triage
+
+Set `SENTINEL_JEV_ENABLED=true` and provide `SENTINEL_JEV_API_KEY_FILE` (a mounted secret containing a TypeSafe API key), or `SENTINEL_JEV_API_KEY` for a local development environment. The default is off. On a newly opened monitor or system incident, Sentinel sends its title, summary, and existing severity to TypeSafe's Jev API. The returned category (`network`, `compute`, `storage`, `application`, or `other`), confidence, model, and review flag are saved on the existing incident as `jevTriage` and exposed through `GET /api/incidents` and generic webhook payloads. Confidence below 0.8 or `other` requests operator review.
+
+Jev does not change the rule severity, suppress alerts, route deliveries, or run remediation. The existing incident still opens and notifies when Jev times out, returns an error, or sends an invalid answer. A request has a 2.5 second timeout and is made once when the incident opens, not on reminders. Validate the classification against representative lab incidents before using it in routing decisions. This is an outbound API call: avoid putting credentials or sensitive log content in incident titles and summaries. Do not commit the API key or a populated `.env` file.
+
 The Topology page presents those counts and assets directly on each correlation card. Impact remains advisory: the graph proves a known dependency path, not that every linked asset is unavailable. Operators should confirm redundant links and current service health before assigning the network event as the root cause.
 
 ## Stage 32: dependency path reliability

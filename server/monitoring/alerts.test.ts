@@ -49,4 +49,24 @@ describe('alert and incident lifecycle', () => {
     const repeated=await service.reconcileSystemIncident({key:'recovery-readiness',state:'not-ready',summary:'Two required recovery controls failed',cooldownSeconds:900});expect(repeated?.id).toBe(opened?.id);expect(repeated?.occurrences).toBe(2);expect(service.incidents('open')).toHaveLength(1);
     await service.acknowledgeIncident(opened!.id);const resolved=await service.reconcileSystemIncident({key:'recovery-readiness',state:'ready',summary:'All required recovery controls pass',cooldownSeconds:900});expect(resolved?.status).toBe('resolved');expect(service.deliveries().map(item=>item.event)).toEqual(['resolved','opened']);
   });
+
+  it('attaches Jev triage once while preserving the system incident lifecycle', async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), 'sentinel-jev-')); directories.push(directory);
+    const fetcher = vi.fn(async () => Response.json({ model: 'jev-1.13.0', answers: {
+      category: { type: 'choice', choice: 'storage', confidence: .91 }
+    } }));
+    vi.stubGlobal('fetch', fetcher);
+    try {
+      const service = new MonitoringService({ SENTINEL_DATA_FILE: path.join(directory, 'data.json'), SENTINEL_JEV_ENABLED: 'true', SENTINEL_JEV_API_KEY: 'test' });
+      await service.ready;
+      const input = { key: 'pbs-storage', state: 'not-ready' as const, summary: 'PBS datastore is full', cooldownSeconds: 900 };
+      const opened = await service.reconcileSystemIncident(input);
+      expect(opened).toMatchObject({ severity: 'critical', status: 'open', jevTriage: { category: 'storage', review: false } });
+      await service.reconcileSystemIncident(input);
+      expect(fetcher).toHaveBeenCalledTimes(1);
+      expect(service.incidents()).toHaveLength(1);
+      await service.reconcileSystemIncident({ ...input, state: 'ready' });
+      expect(service.incidents('resolved')).toHaveLength(1);
+    } finally { vi.unstubAllGlobals(); }
+  });
 });
