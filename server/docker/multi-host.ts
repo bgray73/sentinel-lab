@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { dockerConfigFromEnvironment, discoverDocker, type DockerConfig } from './client.js';
 import type { DockerInventory } from './types.js';
 
@@ -19,10 +20,12 @@ export function dockerTargetsFromEnvironment(env: NodeJS.ProcessEnv = process.en
     const candidate = item as Record<string, unknown>;
     if (typeof candidate.id !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(candidate.id) || ids.has(candidate.id)) throw new Error('Docker target IDs must be unique and alphanumeric');
     if (typeof candidate.baseUrl !== 'string') throw new Error('Docker target requires baseUrl');
+    const certPaths = [candidate.caPath, candidate.certPath, candidate.keyPath];
+    if (certPaths.some(value => typeof value !== 'string' || !path.isAbsolute(value as string))) throw new Error('Remote Docker targets require absolute CA, client certificate and key paths');
     const parsedUrl = new URL(candidate.baseUrl);
     if (parsedUrl.protocol !== 'https:' || parsedUrl.username || parsedUrl.password || parsedUrl.pathname !== '/' || parsedUrl.search || parsedUrl.hash) throw new Error('Remote Docker targets require HTTPS origins without credentials or paths');
     ids.add(candidate.id);
-    targets.push({ id: candidate.id, config: { baseUrl: parsedUrl.origin } });
+    targets.push({ id: candidate.id, config: { baseUrl: parsedUrl.origin, tls: { caPath: candidate.caPath as string, certPath: candidate.certPath as string, keyPath: candidate.keyPath as string } } });
   }
   return targets;
 }
