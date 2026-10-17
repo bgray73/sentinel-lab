@@ -11,6 +11,7 @@ import { simulatedInventory } from './proxmox/inventory.js';
 import { discoverDocker, dockerConfigFromEnvironment } from './docker/client.js';
 import { simulatedDockerInventory } from './docker/inventory.js';
 import { buildUnifiedInventory } from './workloads/inventory.js';
+import { collectDockerTargets, dockerTargetsFromEnvironment } from './docker/multi-host.js';
 import { buildTopology } from './topology/engine.js';
 import type {TelemetryService} from './telemetry/service.js';
 import type { CmdbService } from './cmdb/service.js';
@@ -334,14 +335,27 @@ export function createApp(store: Store, monitoring?: MonitoringService, telemetr
     if (req.query.simulate !== 'false') return res.json(buildUnifiedInventory(simulatedInventory(), simulatedDockerInventory()));
     try {
       const pve = configFromEnvironment();
-      const docker = dockerConfigFromEnvironment();
-      if (!pve && !docker) return res.status(503).json({ error: 'No live workload sources configured' });
+      const targets = dockerTargetsFromEnvironment();
+      if (!pve && targets.length === 0) return res.status(503).json({ error: 'No live workload sources configured' });
       const [pveResult, dockerResult] = await Promise.allSettled([
         pve ? discoverProxmox(pve) : Promise.resolve(null),
-        docker ? discoverDocker(docker) : Promise.resolve(null)
+        collectDockerTargets(targets)
       ]);
       if (pveResult.status === 'rejected' || dockerResult.status === 'rejected') return res.status(502).json({ error: 'Workload inventory incomplete: source unavailable' });
-      return res.json(buildUnifiedInventory(pveResult.value, dockerResult.value));
+      if (dockerResult.value.errors.length) return res.status(502).json({ error: 'Docker hosts unavailable', hosts: dockerResult.value.errors.map(item => item.id) });
+      const inventories = dockerResult.value.results;
+      const combined = buildUnifiedInventory(pveResult.value, null);
+      for (const entry of inventories) {
+        const normalized = buildUnifiedInventory(null, entry.inventory);
+        combined.workloads.push(...normalized.workloads.map(workload => ({ ...workload, id: 'target:' + entry.id + ':' + workload.id, host: entry.id })));
+        combined.summary.total += normalized.summary.total;
+        combined.summary.running += normalized.summary.running;
+        combined.summary.stopped += normalized.summary.stopped;
+        combined.summary.unhealthy += normalized.summary.unhealthy;
+        combined.summary.simulated += normalized.summary.simulated;
+      }
+      combined.workloads.sort((left, right) => left.name.localeCompare(right.name));
+      return res.json(combined);
     } catch (error) {
       return res.status(502).json({ error: error instanceof Error ? error.message : 'Workload discovery failed' });
     }
