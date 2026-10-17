@@ -1,0 +1,16 @@
+name: Sentinel LXC offline plan
+on:
+  pull_request:
+    paths:
+      - 'deploy/sentinel/provision-sentinel01-lxc.sh'
+      - 'deploy/sentinel/validate-sentinel01-plan.sh'
+      - 'deploy/sentinel/SENTINEL01-PLAN.md'
+      - '.github/workflows/sentinel-lxc-plan.yml'
+  workflow_dispatch:
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Offline safety validation
+        run: bash deploy/sentinel/validate-sentinel01-plan.sh
