@@ -14,12 +14,12 @@ Additional Docker targets can be defined as a JSON array in `DOCKER_HOSTS_JSON`:
 
 ```json
 [
-  {"id":"ai01","baseUrl":"https://docker-ai.example:2376"},
-  {"id":"apps01","baseUrl":"https://docker-apps.example:2376"}
+  {"id":"ai01","baseUrl":"https://docker-ai.example:2376","caPath":"/run/secrets/docker-ca.pem","certPath":"/run/secrets/docker-client.pem","keyPath":"/run/secrets/docker-client-key.pem"},
+  {"id":"apps01","baseUrl":"https://docker-apps.example:2376","caPath":"/run/secrets/docker-ca.pem","certPath":"/run/secrets/docker-client.pem","keyPath":"/run/secrets/docker-client-key.pem"}
 ]
 ```
 
-The multi-host collector requires HTTPS URLs and uses Node's standard certificate verification. **It does not yet support Docker client certificates or per-host authentication.** Do not expose unauthenticated Docker APIs, even on a private VLAN. Do not use this configuration for live remote engines until mutually authenticated TLS or an equivalent authenticated proxy has been implemented and verified.
+The multi-host collector requires HTTPS URLs and uses Node's standard certificate verification. The collector now requires absolute paths to a CA certificate, client certificate, and client private key for each remote host, and verifies server certificates. Mount these secrets read-only with restricted filesystem permissions. Configure each Docker daemon for TLS client-certificate authentication and restrict network access. Do not expose unauthenticated Docker APIs, even on a private VLAN. Validate the certificate chain and authorization before using live endpoints.
 
 Each target must have a unique ID. A host that is unreachable causes the live unified API to return HTTP 502 with the affected target IDs.
 
