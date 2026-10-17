@@ -375,7 +375,7 @@ export function createApp(store: Store, monitoring?: MonitoringService, telemetr
       const combined = buildUnifiedInventory(pveResult.value, null);
       for (const entry of inventories) {
         const normalized = buildUnifiedInventory(null, entry.inventory);
-        combined.workloads.push(...normalized.workloads.map(workload => ({ ...workload, id: 'target:' + entry.id + ':' + workload.id, host: entry.id })));
+        combined.workloads.push(...normalized.workloads.map(workload => ({ ...workload, id: 'target:' + entry.id + ':' + workload.id, host: entry.id, targetId: entry.id })));
         combined.summary.total += normalized.summary.total;
         combined.summary.running += normalized.summary.running;
         combined.summary.stopped += normalized.summary.stopped;
