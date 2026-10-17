@@ -1,6 +1,6 @@
 # Sentinel dedicated LXC — predeployment worksheet
 
-**Status:** All physical Proxmox hosts are pending deployment. UCG Fiber VLANs are already configured according to the owner; firewall reachability and switch/host VLAN paths remain unverified. This worksheet deliberately contains no guessed addresses, CTIDs, disk pool names, or bridge IDs. The scripts in this PR are not an installation.
+**Status:** All physical Proxmox hosts are pending deployment. UCG Fiber VLANs are already configured according to the owner; firewall reachability and switch/host VLAN paths remain unverified. Proxmox management is VLAN 20 (10.10.20.0/24). This worksheet deliberately contains no guessed addresses, CTIDs, disk pool names, or bridge IDs. The scripts in this PR are not an installation.
 
 | Setting | Proposed / pending |
 | --- | --- |
@@ -13,9 +13,9 @@
 | Root disk | 32 GiB on SSD-backed rootdir-capable storage (ID TBD) |
 | LXC privilege | Unprivileged |
 | Nesting / keyctl | Disabled |
-| Network role | VLAN 41 infrastructure services, per Proxmox topology |
+| Network role | VLAN 41 infrastructure services (10.10.41.0/24), per UCG Fiber screenshot and Proxmox topology |
 | Management bridge | TBD after pve01 network setup; confirm VLAN 41 tagging or access bridge |
-| IP | DHCP initially; reserve management address later |
+| IP | DHCP initially in 10.10.41.0/24; reserve address later, gateway not yet verified |
 | Firewall | Proxmox CT NIC firewall enabled; rules must be separately defined and tested |
 | Application | Native Node.js, no Docker socket |
 | Authentication | Trusted proxy before any remote access |
