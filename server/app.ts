@@ -330,7 +330,22 @@ export function createApp(store: Store, monitoring?: MonitoringService, telemetr
     try { const config = dockerConfigFromEnvironment(); if (!config) return res.status(503).json({ error: 'Docker is not configured. Set DOCKER_SOCKET_PATH.' }); return res.json(await discoverDocker(config)); }
     catch (error) { return res.status(502).json({ error: error instanceof Error ? error.message : 'Docker discovery failed' }); }
   });
-  app.get('/api/workloads', (_req, res) => res.json(buildUnifiedInventory(simulatedInventory(), simulatedDockerInventory())));
+  app.get('/api/workloads', async (req, res) => {
+    if (req.query.simulate !== 'false') return res.json(buildUnifiedInventory(simulatedInventory(), simulatedDockerInventory()));
+    try {
+      const pve = configFromEnvironment();
+      const docker = dockerConfigFromEnvironment();
+      if (!pve && !docker) return res.status(503).json({ error: 'No live workload sources configured' });
+      const [pveResult, dockerResult] = await Promise.allSettled([
+        pve ? discoverProxmox(pve) : Promise.resolve(null),
+        docker ? discoverDocker(docker) : Promise.resolve(null)
+      ]);
+      if (pveResult.status === 'rejected' || dockerResult.status === 'rejected') return res.status(502).json({ error: 'Workload inventory incomplete: source unavailable' });
+      return res.json(buildUnifiedInventory(pveResult.value, dockerResult.value));
+    } catch (error) {
+      return res.status(502).json({ error: error instanceof Error ? error.message : 'Workload discovery failed' });
+    }
+  });
   app.get('/api/inventory', async (req, res) => {
     if (req.query.simulate !== 'false') return res.json(simulatedInventory());
     try { const config = configFromEnvironment(); if (!config) return res.status(503).json({ error: 'Proxmox is not configured. Set PVE_URL, PVE_TOKEN_ID, and PVE_TOKEN_SECRET.' }); return res.json(await discoverProxmox(config)); }
