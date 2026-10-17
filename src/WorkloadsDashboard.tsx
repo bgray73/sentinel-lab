@@ -38,7 +38,7 @@ export function WorkloadsDashboard() {
       {data.summary.simulated > 0 && <p>Demo data: not live infrastructure status</p>}
       <table><thead><tr><th>Name</th><th>Type</th><th>Host</th><th>Status</th><th>Health</th>{live && actionsEnabled && <th>Actions</th>}</tr></thead>
       <tbody>{data.workloads.filter(w => kind === 'all' || w.kind === kind).map(w =>
-        <tr key={w.id}><td>{w.name}</td><td>{w.kind}</td><td>{w.host}</td><td>{w.state}</td><td>{w.health}</td>{live && actionsEnabled && <td>{w.kind === 'docker' && !w.simulated && w.id.startsWith('docker:') ? <><button onClick={() => void act('start', w.id.slice(7))}>Start</button><button onClick={() => void act('stop', w.id.slice(7))}>Stop</button><button onClick={() => void act('restart', w.id.slice(7))}>Restart</button></> : null}</td>}</tr>)}</tbody></table>
+        <tr key={w.id}><td>{w.name}</td><td>{w.kind}</td><td>{w.host}</td><td>{w.state}</td><td>{w.health}</td>{live && actionsEnabled && <td>{w.kind === 'docker' && !w.simulated && w.targetId === 'primary' && Boolean(w.containerId) ? <><button onClick={() => void act('start', w.containerId!)}>Start</button><button onClick={() => void act('stop', w.containerId!)}>Stop</button><button onClick={() => void act('restart', w.containerId!)}>Restart</button></> : null}</td>}</tr>)}</tbody></table>
     </>}
   </section>;
 }
