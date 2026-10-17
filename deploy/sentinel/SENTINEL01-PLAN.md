@@ -1,6 +1,6 @@
 # Sentinel dedicated LXC — predeployment worksheet
 
-**Status:** All physical Proxmox hosts are pending deployment. This worksheet deliberately contains no guessed addresses, CTIDs, disk pool names, or bridge IDs. The scripts in this PR are not an installation.
+**Status:** All physical Proxmox hosts are pending deployment. UCG Fiber VLANs are already configured according to the owner; firewall reachability and switch/host VLAN paths remain unverified. This worksheet deliberately contains no guessed addresses, CTIDs, disk pool names, or bridge IDs. The scripts in this PR are not an installation.
 
 | Setting | Proposed / pending |
 | --- | --- |
