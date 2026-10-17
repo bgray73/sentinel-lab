@@ -10,6 +10,7 @@ import { configFromEnvironment, discoverProxmox } from './proxmox/client.js';
 import { simulatedInventory } from './proxmox/inventory.js';
 import { discoverDocker, dockerConfigFromEnvironment } from './docker/client.js';
 import { simulatedDockerInventory } from './docker/inventory.js';
+import { buildUnifiedInventory } from './workloads/inventory.js';
 import { buildTopology } from './topology/engine.js';
 import type {TelemetryService} from './telemetry/service.js';
 import type { CmdbService } from './cmdb/service.js';
@@ -329,6 +330,7 @@ export function createApp(store: Store, monitoring?: MonitoringService, telemetr
     try { const config = dockerConfigFromEnvironment(); if (!config) return res.status(503).json({ error: 'Docker is not configured. Set DOCKER_SOCKET_PATH.' }); return res.json(await discoverDocker(config)); }
     catch (error) { return res.status(502).json({ error: error instanceof Error ? error.message : 'Docker discovery failed' }); }
   });
+  app.get('/api/workloads', (_req, res) => res.json(buildUnifiedInventory(simulatedInventory(), simulatedDockerInventory())));
   app.get('/api/inventory', async (req, res) => {
     if (req.query.simulate !== 'false') return res.json(simulatedInventory());
     try { const config = configFromEnvironment(); if (!config) return res.status(503).json({ error: 'Proxmox is not configured. Set PVE_URL, PVE_TOKEN_ID, and PVE_TOKEN_SECRET.' }); return res.json(await discoverProxmox(config)); }
