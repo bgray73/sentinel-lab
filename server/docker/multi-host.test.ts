@@ -5,14 +5,14 @@ import type { DockerInventory } from './types.js';
 describe('Docker multi-host discovery', () => {
   it('loads distinct HTTPS targets', () => {
     const targets = dockerTargetsFromEnvironment({ DOCKER_HOSTS_JSON: JSON.stringify([
-      { id: 'ai01', baseUrl: 'https://docker-ai.example:2376' },
-      { id: 'apps', baseUrl: 'https://docker-apps.example:2376' }
+      { id: 'ai01', baseUrl: 'https://docker-ai.example:2376', caPath: '/certs/ca.pem', certPath: '/certs/client.pem', keyPath: '/certs/client-key.pem' },
+      { id: 'apps', baseUrl: 'https://docker-apps.example:2376', caPath: '/certs/ca.pem', certPath: '/certs/client.pem', keyPath: '/certs/client-key.pem' }
     ]) });
     expect(targets.map(t => t.id)).toEqual(['ai01', 'apps']);
   });
   it('rejects plaintext and duplicate targets', () => {
     expect(() => dockerTargetsFromEnvironment({ DOCKER_HOSTS_JSON: '[{"id":"ai","baseUrl":"http://localhost:2375"}]' })).toThrow();
-    expect(() => dockerTargetsFromEnvironment({ DOCKER_HOSTS_JSON: '[{"id":"x","baseUrl":"https://one.example"},{"id":"x","baseUrl":"https://two.example"}]' })).toThrow();
+    expect(() => dockerTargetsFromEnvironment({ DOCKER_HOSTS_JSON: '[{"id":"x","baseUrl":"https://one.example","caPath":"/ca","certPath":"/cert","keyPath":"/key"},{"id":"x","baseUrl":"https://two.example","caPath":"/ca","certPath":"/cert","keyPath":"/key"}]' })).toThrow();
   });
   it('reports failures without dropping successful hosts', async () => {
     const inventory = { source: 'docker', engineName: 'host-a', containers: [] } as unknown as DockerInventory;
