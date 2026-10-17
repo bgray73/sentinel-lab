@@ -88,6 +88,17 @@ describe('authentication and authorization', () => {
     expect((await fetch(`${base}/api/collectors`, { method: 'POST', headers: admin })).status).toBe(503);
   });
 
+  it('denies workload actions to viewers, operators, and admins without feature enablement', async () => {
+    const base = await start(config);
+    const url = base + '/api/workloads/docker/actions';
+    const body = JSON.stringify({ action: 'restart', containerId: 'a'.repeat(64), confirmation: 'restart:' + 'a'.repeat(64) });
+    for (const [group, expected] of [['everyone', 403], ['operators', 403], ['admins', 403]] as const) {
+      const response = await fetch(url, { method: 'POST', headers: { ...proxyHeaders(group, group), 'content-type': 'application/json' }, body });
+      expect(response.status).toBe(expected);
+    }
+    expect((await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body })).status).toBe(401);
+  });
+
   it('restricts Jev outbound analysis to administrators', async () => {
     const base = await start(config);
     const path = `${base}/api/integrations/jev/incidents/example/analyze`;
