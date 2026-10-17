@@ -29,6 +29,17 @@ Each target must have a unique ID. A host that is unreachable causes the live un
 
 `GET /api/workloads?simulate=false` queries live configured sources. Existing Sentinel authentication applies. Returned workload IDs include provider and Docker target identity to avoid collisions.
 
+## Deployment validation (read-only)
+
+1. Copy `deploy/sentinel/.env.example` to a local `.env` and keep it outside version control. Leave `SENTINEL_ENABLE_WORKLOAD_ACTIONS=false`. Do not mount the Docker socket during the initial rollout.
+2. Configure `PVE_URL`, `PVE_TOKEN_ID` and a read-only `PVEAuditor` API token secret. Prefer `PVE_TOKEN_SECRET_FILE` with a read-only mounted secret; confirm the container can read it. Trust your Proxmox CA via `NODE_EXTRA_CA_CERTS` if necessary.
+3. Run `docker compose -f deploy/sentinel/docker-compose.yml config` to validate configuration, then `docker compose -f deploy/sentinel/docker-compose.yml up -d --build` on the intended Sentinel host only after reviewing bind addresses, secrets, and storage.
+4. Confirm `GET /api/health` returns 200 and `GET /api/workloads` shows demo data. Use `GET /api/workloads?simulate=false` to check live Proxmox inventory. Compare VM and LXC counts with Proxmox itself.
+5. Verify `GET /api/workloads/actions/status` reports `enabled:false`. Keep the API bound to loopback unless it is protected by a trusted authentication proxy. Do not open port 4100 to the network without authentication.
+6. For rollback, return to the previous container image and preserve `/var/lib/sentinel` persistent data; do not delete volumes. Back up the data directory before upgrading an existing deployment.
+
+**Warning:** Docker socket mounts grant powerful host-level access even when configured `:ro`. Do not use `docker-compose.live-docker.yml` until the deployment security review is complete. The remote Docker mTLS settings also require certificates to be mounted inside the Sentinel container; environment variables alone do not mount them.
+
 ## Before merging
 
 Run `pnpm test` and `pnpm build:production`, review the GitHub Actions CI and container-build jobs, and verify authorization at the reverse proxy. Keep write operations disabled until audited, role-gated actions are implemented.
