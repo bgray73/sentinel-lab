@@ -13,12 +13,15 @@
 | Root disk | 32 GiB on SSD-backed rootdir-capable storage (ID TBD) |
 | LXC privilege | Unprivileged |
 | Nesting / keyctl | Disabled |
-| Management bridge | TBD after pve01 network setup |
+| Network role | VLAN 41 infrastructure services, per Proxmox topology |
+| Management bridge | TBD after pve01 network setup; confirm VLAN 41 tagging or access bridge |
 | IP | DHCP initially; reserve management address later |
 | Firewall | Proxmox CT NIC firewall enabled; rules must be separately defined and tested |
 | Application | Native Node.js, no Docker socket |
 | Authentication | Trusted proxy before any remote access |
 | Workload actions | Disabled |
+
+The [Proxmox deployment contract](https://github.com/bgray73/proxmox_ve_installation/blob/feature/sentinel-deployment-contract/docs/SENTINEL.md) owns infrastructure placement and the build order. Sentinel owns application configuration. Both repos must be reviewed together when the deployment contract changes.
 
 ## Before any provisioning
 
