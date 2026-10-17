@@ -332,6 +332,13 @@ export function createApp(store: Store, monitoring?: MonitoringService, telemetr
     try { const config = dockerConfigFromEnvironment(); if (!config) return res.status(503).json({ error: 'Docker is not configured. Set DOCKER_SOCKET_PATH.' }); return res.json(await discoverDocker(config)); }
     catch (error) { return res.status(502).json({ error: error instanceof Error ? error.message : 'Docker discovery failed' }); }
   });
+  app.get('/api/workloads/actions/status', (_req, res) => {
+    const identity = res.locals.identity as Identity;
+    const enabled = auth.mode === 'proxy' && process.env.SENTINEL_ENABLE_WORKLOAD_ACTIONS === 'true' && identity.role === 'admin';
+    let localDocker = false;
+    try { const config = dockerConfigFromEnvironment(); localDocker = Boolean(config?.socketPath && !config.baseUrl); } catch { /* unavailable */ }
+    return res.json({ enabled: enabled && localDocker, localDocker, role: identity.role });
+  });
   app.post('/api/workloads/docker/actions', async (req, res) => {
     const identity = res.locals.identity as Identity;
     if (auth.mode !== 'proxy' || process.env.SENTINEL_ENABLE_WORKLOAD_ACTIONS !== 'true') return res.status(403).json({ error: 'Workload actions require proxy authentication and explicit enablement' });
