@@ -9,8 +9,8 @@ if [[ "$EUID" -ne 0 ]]; then echo 'Run as root on pve01' >&2; exit 1; fi
 if [[ "$(hostname -s)" != 'pve01' ]]; then echo 'Wrong host: expected pve01' >&2; exit 1; fi
 if [[ ! "$CTID" =~ ^[1-9][0-9]{2,8}$ ]]; then echo 'Invalid CTID' >&2; exit 1; fi
 if pct status "$CTID" >/dev/null 2>&1 || qm status "$CTID" >/dev/null 2>&1; then echo 'CTID already in use' >&2; exit 1; fi
-pvesm status | grep -F -- "$STORAGE" >/dev/null || { echo 'Storage not found' >&2; exit 1; }
-pvesm list "$STORAGE" --content rootdir >/dev/null || { echo 'Storage does not support rootdir' >&2; exit 1; }
+pvesm status | awk 'NR>1 {print $1}' | grep -Fx -- "$STORAGE" >/dev/null || { echo 'Storage not found' >&2; exit 1; }
+pvesm list "$STORAGE" --content rootdir >/dev/null || { echo 'Storage rootdir check failed' >&2; exit 1; }
 pvesm list "${TEMPLATE%%:*}" --content vztmpl | grep -F -- "$TEMPLATE" >/dev/null || { echo 'Template not found' >&2; exit 1; }
 ip link show "$BRIDGE" >/dev/null || { echo 'Bridge not found' >&2; exit 1; }
 echo "PROPOSED: pct create $CTID $TEMPLATE --hostname sentinel01 --ostype debian --unprivileged 1 --cores 2 --memory 4096 --swap 512 --rootfs $STORAGE:32 --net0 name=eth0,bridge=$BRIDGE,ip=dhcp,firewall=1 --onboot 1 --features nesting=0,keyctl=0 --start 0"
