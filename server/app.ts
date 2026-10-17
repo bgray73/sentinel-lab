@@ -10,6 +10,9 @@ import { configFromEnvironment, discoverProxmox } from './proxmox/client.js';
 import { simulatedInventory } from './proxmox/inventory.js';
 import { discoverDocker, dockerConfigFromEnvironment } from './docker/client.js';
 import { simulatedDockerInventory } from './docker/inventory.js';
+import { buildUnifiedInventory } from './workloads/inventory.js';
+import { collectDockerTargets, dockerTargetsFromEnvironment } from './docker/multi-host.js';
+import { executeDockerAction, validateDockerAction } from './docker/actions.js';
 import { buildTopology } from './topology/engine.js';
 import type {TelemetryService} from './telemetry/service.js';
 import type { CmdbService } from './cmdb/service.js';
@@ -328,6 +331,62 @@ export function createApp(store: Store, monitoring?: MonitoringService, telemetr
     if (req.query.simulate !== 'false') return res.json(simulatedDockerInventory());
     try { const config = dockerConfigFromEnvironment(); if (!config) return res.status(503).json({ error: 'Docker is not configured. Set DOCKER_SOCKET_PATH.' }); return res.json(await discoverDocker(config)); }
     catch (error) { return res.status(502).json({ error: error instanceof Error ? error.message : 'Docker discovery failed' }); }
+  });
+  app.get('/api/workloads/actions/status', (_req, res) => {
+    const identity = res.locals.identity as Identity;
+    const enabled = auth.mode === 'proxy' && process.env.SENTINEL_ENABLE_WORKLOAD_ACTIONS === 'true' && identity.role === 'admin';
+    let localDocker = false;
+    try { const config = dockerConfigFromEnvironment(); localDocker = Boolean(config?.socketPath && !config.baseUrl); } catch { /* unavailable */ }
+    return res.json({ enabled: enabled && localDocker, localDocker, role: identity.role });
+  });
+  app.post('/api/workloads/docker/actions', async (req, res) => {
+    const identity = res.locals.identity as Identity;
+    if (auth.mode !== 'proxy' || process.env.SENTINEL_ENABLE_WORKLOAD_ACTIONS !== 'true') return res.status(403).json({ error: 'Workload actions require proxy authentication and explicit enablement' });
+    let action: 'start' | 'stop' | 'restart';
+    let containerId: string;
+    try {
+      ({ action, containerId } = validateDockerAction(req.body?.action, req.body?.containerId));
+    } catch (error) { return res.status(400).json({ error: error instanceof Error ? error.message : 'Invalid action' }); }
+    if (req.body?.confirmation !== action + ':' + containerId) return res.status(400).json({ error: 'Explicit action and container ID confirmation required' });
+    const config = dockerConfigFromEnvironment();
+    if (!config?.socketPath || config.baseUrl) return res.status(503).json({ error: 'Local Docker socket is not configured for actions' });
+    try {
+      await executeDockerAction(config, action, containerId);
+      security.record({ type: 'workload_action', severity: 'info', subject: identity.subject, role: identity.role, method: req.method, path: req.path, reason: action + ':' + containerId + ':success' });
+      return res.json({ status: 'accepted', action, containerId });
+    } catch (error) {
+      security.record({ type: 'workload_action', severity: 'warning', subject: identity.subject, role: identity.role, method: req.method, path: req.path, reason: action + ':' + containerId + ':failed' });
+      return res.status(502).json({ error: error instanceof Error ? error.message : 'Docker action failed' });
+    }
+  });
+  app.get('/api/workloads', async (req, res) => {
+    if (req.query.simulate !== 'false') return res.json(buildUnifiedInventory(simulatedInventory(), simulatedDockerInventory()));
+    try {
+      const pve = configFromEnvironment();
+      const targets = dockerTargetsFromEnvironment();
+      if (!pve && targets.length === 0) return res.status(503).json({ error: 'No live workload sources configured' });
+      const [pveResult, dockerResult] = await Promise.allSettled([
+        pve ? discoverProxmox(pve) : Promise.resolve(null),
+        collectDockerTargets(targets)
+      ]);
+      if (pveResult.status === 'rejected' || dockerResult.status === 'rejected') return res.status(502).json({ error: 'Workload inventory incomplete: source unavailable' });
+      if (dockerResult.value.errors.length) return res.status(502).json({ error: 'Docker hosts unavailable', hosts: dockerResult.value.errors.map(item => item.id) });
+      const inventories = dockerResult.value.results;
+      const combined = buildUnifiedInventory(pveResult.value, null);
+      for (const entry of inventories) {
+        const normalized = buildUnifiedInventory(null, entry.inventory);
+        combined.workloads.push(...normalized.workloads.map(workload => ({ ...workload, id: 'target:' + entry.id + ':' + workload.id, host: entry.id, targetId: entry.id })));
+        combined.summary.total += normalized.summary.total;
+        combined.summary.running += normalized.summary.running;
+        combined.summary.stopped += normalized.summary.stopped;
+        combined.summary.unhealthy += normalized.summary.unhealthy;
+        combined.summary.simulated += normalized.summary.simulated;
+      }
+      combined.workloads.sort((left, right) => left.name.localeCompare(right.name));
+      return res.json(combined);
+    } catch (error) {
+      return res.status(502).json({ error: error instanceof Error ? error.message : 'Workload discovery failed' });
+    }
   });
   app.get('/api/inventory', async (req, res) => {
     if (req.query.simulate !== 'false') return res.json(simulatedInventory());

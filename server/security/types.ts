@@ -1,6 +1,6 @@
 import type { Role } from '../auth.js';
 
-export type SecurityEventType = 'session_authenticated' | 'authentication_failed' | 'authorization_denied';
+export type SecurityEventType = 'session_authenticated' | 'authentication_failed' | 'authorization_denied' | 'workload_action';
 
 export interface SecurityEvent {
   id: string;

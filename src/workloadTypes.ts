@@ -1,0 +1,2 @@
+export type UnifiedWorkload = { id:string; provider:'proxmox'|'docker'; kind:'vm'|'lxc'|'docker'; name:string; host:string; state:string; health:'healthy'|'warning'|'critical'|'unknown'; simulated:boolean; cpuPercent?:number; memoryUsedBytes?:number; memoryTotalBytes?:number; containerId?:string; targetId?:string; image?:string; composeProject?:string };
+export type UnifiedInventory = { collectedAt:string; workloads:UnifiedWorkload[]; summary:{total:number;running:number;stopped:number;unhealthy:number;simulated:number} };

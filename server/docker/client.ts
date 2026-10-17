@@ -1,10 +1,11 @@
 import http from 'node:http';
 import https from 'node:https';
 import path from 'node:path';
+import { readFileSync } from 'node:fs';
 import { buildDockerInventory } from './inventory.js';
 import type { DockerApiContainer, DockerApiStats, DockerInventory, DockerResourceStats } from './types.js';
 
-export type DockerConfig = { socketPath?: string; baseUrl?: string };
+export type DockerConfig = { socketPath?: string; baseUrl?: string; tls?: { caPath: string; certPath: string; keyPath: string } };
 
 export function dockerConfigFromEnvironment(env: NodeJS.ProcessEnv = process.env): DockerConfig | null {
   const baseUrl=env.DOCKER_HOST_URL;
@@ -15,7 +16,7 @@ export function dockerConfigFromEnvironment(env: NodeJS.ProcessEnv = process.env
   return { socketPath };
 }
 
-function socketRequest<T>(endpoint: string, requestPath: string): Promise<T> {
+function socketRequest<T>(endpoint: string, requestPath: string, config?: DockerConfig): Promise<T> {
   return new Promise((resolve, reject) => {
     const remote=endpoint.startsWith('http')?new URL(requestPath,`${endpoint}/`):null;
     const receive=(response:http.IncomingMessage)=>{
@@ -27,7 +28,8 @@ function socketRequest<T>(endpoint: string, requestPath: string): Promise<T> {
         try { resolve(JSON.parse(body) as T); } catch { reject(new Error('Docker API returned invalid JSON')); }
       });
     };
-    const request=remote?(remote.protocol==='https:'?https:http).request(remote,{method:'GET',timeout:15_000},receive):http.request({socketPath:endpoint,path:requestPath,method:'GET',headers:{Host:'localhost'},timeout:15_000},receive);
+    const tls = config?.tls && remote?.protocol === 'https:' ? { ca: readFileSync(config.tls.caPath), cert: readFileSync(config.tls.certPath), key: readFileSync(config.tls.keyPath), rejectUnauthorized: true } : {};
+    const request=remote?(remote.protocol==='https:'?https:http).request(remote,{method:'GET',timeout:15_000,...tls},receive):http.request({socketPath:endpoint,path:requestPath,method:'GET',headers:{Host:'localhost'},timeout:15_000},receive);
     request.on('timeout', () => request.destroy(new Error('Docker API request timed out')));
     request.on('error', reject);
     request.end();
@@ -37,8 +39,8 @@ function socketRequest<T>(endpoint: string, requestPath: string): Promise<T> {
 export async function discoverDocker(config: DockerConfig, requester: typeof socketRequest = socketRequest): Promise<DockerInventory> {
   const endpoint=config.baseUrl||config.socketPath!;
   const [info, containers] = await Promise.all([
-    requester<{ Name: string; ServerVersion?: string }>(endpoint, '/info'),
-    requester<DockerApiContainer[]>(endpoint, '/containers/json?all=1')
+    requester<{ Name: string; ServerVersion?: string }>(endpoint, '/info', config),
+    requester<DockerApiContainer[]>(endpoint, '/containers/json?all=1', config)
   ]);
   return buildDockerInventory(containers, 'docker', info.Name || 'Docker Engine', info.ServerVersion);
 }
@@ -50,5 +52,5 @@ export function normalizeDockerStats(containerId:string,stats:DockerApiStats):Do
 }
 
 export async function collectDockerStats(config:DockerConfig,containerIds:string[],requester:typeof socketRequest=socketRequest) {
-  const endpoint=config.baseUrl||config.socketPath!;return Promise.all(containerIds.map(async id=>normalizeDockerStats(id,await requester<DockerApiStats>(endpoint,`/containers/${encodeURIComponent(id)}/stats?stream=false`))));
+  const endpoint=config.baseUrl||config.socketPath!;return Promise.all(containerIds.map(async id=>normalizeDockerStats(id,await requester<DockerApiStats>(endpoint,`/containers/${encodeURIComponent(id)}/stats?stream=false`,config))));
 }
