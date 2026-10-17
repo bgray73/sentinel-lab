@@ -9,7 +9,6 @@ if [[ "$EUID" -ne 0 ]]; then echo 'Run as root on pve01' >&2; exit 1; fi
 if [[ "$(hostname -s)" != 'pve01' ]]; then echo 'Wrong host: expected pve01' >&2; exit 1; fi
 if [[ ! "$CTID" =~ ^[1-9][0-9]{2,8}$ ]]; then echo 'Invalid CTID' >&2; exit 1; fi
 if pct status "$CTID" >/dev/null 2>&1 || qm status "$CTID" >/dev/null 2>&1; then echo 'CTID already in use' >&2; exit 1; fi
-if pvesh get /cluster/nextid --output-format json 2>/dev/null | grep -q '"'; then :; fi
 pvesm status | grep -F -- "$STORAGE" >/dev/null || { echo 'Storage not found' >&2; exit 1; }
 pvesm list "$STORAGE" --content rootdir >/dev/null || { echo 'Storage does not support rootdir' >&2; exit 1; }
 pvesm list "${TEMPLATE%%:*}" --content vztmpl | grep -F -- "$TEMPLATE" >/dev/null || { echo 'Template not found' >&2; exit 1; }
