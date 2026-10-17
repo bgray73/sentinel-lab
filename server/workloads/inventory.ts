@@ -13,6 +13,8 @@ export type UnifiedWorkload = {
   cpuPercent?: number;
   memoryUsedBytes?: number;
   memoryTotalBytes?: number;
+  containerId?: string;
+  targetId?: string;
   image?: string;
   composeProject?: string;
 };
@@ -43,7 +45,7 @@ export function buildUnifiedInventory(proxmox: ProxmoxInventory | null, docker: 
       provider: 'docker', kind: 'docker', name: container.name,
       host: docker?.engineName ?? 'unknown', state: container.state,
       health: container.health, simulated: docker?.source === 'simulation',
-      image: container.image, composeProject: container.composeProject
+      containerId: container.id, image: container.image, composeProject: container.composeProject
     });
   }
   workloads.sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
