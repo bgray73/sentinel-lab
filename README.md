@@ -284,6 +284,19 @@ pnpm test
 pnpm build:production
 ```
 
+## Dedicated Proxmox LXC pilot
+
+The approved first deployment is a native Node.js service in an unprivileged
+Debian 13 LXC named `sentinel01` on `pve01`: 2 vCPU, 4 GiB RAM, 512 MiB
+swap, and a 32 GiB root disk. The service binds to loopback and uses a dedicated
+read-only `PVEAuditor` token. Workload actions and other live integrations
+remain disabled.
+
+Start with [the deployment worksheet](deploy/sentinel/SENTINEL01-PLAN.md), then
+follow [the native LXC runbook](docs/sentinel-dedicated-lxc.md). Provisioning is
+dry-run by default and requires the operator to supply and confirm every
+site-specific value.
+
 ## Stage 12: secure container deployment
 
 Stage 12 packages the dashboard and API into one production image. The process runs as an unprivileged user, writes only to `/var/lib/sentinel`, exposes an application health check, and adds defensive browser headers. The supplied Compose service drops Linux capabilities, prevents privilege escalation, uses a read-only root filesystem, and binds to `127.0.0.1` by default.

@@ -1,16 +1,31 @@
 name: Sentinel LXC offline plan
+
 on:
   pull_request:
     paths:
+      - 'server/index.ts'
+      - 'server/listen.ts'
+      - 'server/listen.test.ts'
+      - 'docs/sentinel-dedicated-lxc.md'
       - 'deploy/sentinel/provision-sentinel01-lxc.sh'
+      - 'deploy/sentinel/install-sentinel-native.sh'
+      - 'deploy/sentinel/upgrade-sentinel-native.sh'
+      - 'deploy/sentinel/rollback-sentinel-native.sh'
+      - 'deploy/sentinel/validate-sentinel-native.sh'
       - 'deploy/sentinel/validate-sentinel01-plan.sh'
+      - 'deploy/sentinel/sentinel.service'
+      - 'deploy/sentinel/sentinel.env.native.example'
       - 'deploy/sentinel/SENTINEL01-PLAN.md'
       - '.github/workflows/sentinel-lxc-plan.yml'
   workflow_dispatch:
+
+permissions:
+  contents: read
+
 jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Offline safety validation
         run: bash deploy/sentinel/validate-sentinel01-plan.sh
