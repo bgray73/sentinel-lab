@@ -10,7 +10,7 @@ Group=sentinel
 WorkingDirectory=/opt/sentinel/current
 Environment=NODE_ENV=production
 EnvironmentFile=/etc/sentinel/sentinel.env
-ExecStart=/usr/bin/node /opt/sentinel/current/server-dist/index.js
+ExecStart=@NODE_BIN@ /opt/sentinel/current/server-dist/index.js
 Restart=on-failure
 RestartSec=5s
 TimeoutStopSec=30s
