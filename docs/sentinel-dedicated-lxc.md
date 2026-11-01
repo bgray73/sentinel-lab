@@ -1,42 +1,127 @@
 # Sentinel on a dedicated Proxmox LXC
 
-This is a deployment plan, **not an executed installation**. Start with read-only Proxmox discovery. No Docker socket or privileged container features are required.
+This is the approved read-only pilot design for `sentinel01` on `pve01`.
+Provisioning remains deliberately operator-controlled: the scripts validate
+inputs, print the proposed action first, and never guess site-specific values.
 
-## Suggested LXC profile
+## 1. Create the LXC
 
-- Name: `sentinel01`; Debian 12 or 13; unprivileged; start at boot
-- 2 vCPU, 4 GiB RAM, 32 GiB SSD root disk (increase if retention grows)
-- One management-network NIC; reserve an address in DHCP or assign a documented static address
-- Disable nesting and keyctl unless later justified by an explicitly reviewed container runtime
-- Allow outbound TCP 8006 to the Proxmox API and necessary package repositories; do not expose TCP 4100 to the LAN without authenticated ingress
+Use the profile and gates in `deploy/sentinel/SENTINEL01-PLAN.md`. The guarded
+script requires a real CTID, storage ID, Debian 13 template volume, and verified
+bridge:
 
-Select the host node and VMID after checking available cluster resources and VMID allocation. Use an approved Debian LXC template. For initial installation, prefer native Node.js to avoid nesting Docker inside LXC.
-
-## Install and build inside the LXC
-
-Install Node.js 24 LTS, Git, build tools, and pnpm 10.15.1 using trusted package sources. Clone the repository at an approved release or commit, then run:
-
-```sh
-corepack enable
-pnpm install --frozen-lockfile
-pnpm build:production
+```bash
+CTID=... STORAGE=... TEMPLATE=... BRIDGE=... \
+  bash deploy/sentinel/provision-sentinel01-lxc.sh
 ```
 
-Create a dedicated non-login service user and persistent `/var/lib/sentinel` directory owned by that user. Store credentials outside the Git checkout, readable only by the service user. Set `DATABASE_PATH`, `SENTINEL_DATA_FILE`, and other persistent file variables to paths under `/var/lib/sentinel` as appropriate. Use systemd to run `node server-dist/index.js` from the checkout or release directory with `NODE_ENV=production`, `PORT=4100`, `SENTINEL_ENABLE_WORKLOAD_ACTIONS=false`, and `SENTINEL_AUTH_MODE=disabled` only when the service is bound to loopback and accessed via a trusted authenticated proxy or SSH tunnel.
+That command is a dry run. To create the stopped unprivileged LXC after
+reviewing the printed command:
 
-**Important:** The Node server's actual bind behavior must be confirmed before opening any firewall access. The Docker Compose loopback binding does not apply to a native Node service. Configure network isolation at the LXC firewall and host layer.
+```bash
+CTID=... STORAGE=... TEMPLATE=... BRIDGE=... APPLY=YES \
+  bash deploy/sentinel/provision-sentinel01-lxc.sh
+```
 
-## Proxmox access
+Review `pct config CTID` before starting the container.
 
-Create a dedicated Proxmox API token with `PVEAuditor` permissions at `/`. Configure `PVE_URL`, `PVE_TOKEN_ID`, and `PVE_TOKEN_SECRET_FILE` with the token secret stored outside source control. Trust the Proxmox API certificate chain, using `NODE_EXTRA_CA_CERTS` for a private CA if necessary. Do not disable TLS verification.
+## 2. Prepare Debian
 
-## Validation and rollback
+Inside `sentinel01`, install Git, CA certificates, build tools, and Node.js 24
+LTS from a trusted package source. Verify that `node` resolves to the intended
+binary and reports at least version 22.13:
 
-1. Confirm `GET /api/health` returns HTTP 200 from inside the LXC.
-2. Confirm `GET /api/workloads` returns clearly labeled simulated inventory.
-3. Confirm `GET /api/workloads?simulate=false` returns expected Proxmox VMs and LXCs; compare counts against the cluster UI.
-4. Confirm `GET /api/workloads/actions/status` returns `enabled:false`.
-5. Verify LXC restart, persistent data, disk usage, and access restrictions.
-6. Snapshot or back up the LXC before upgrading. Roll back to the prior known-good release and restore persistent data only if required.
+```bash
+node --version
+command -v node
+```
 
-Do not enable Docker lifecycle actions during this phase. An LXC snapshot is not a substitute for an off-host backup.
+Clone the repository into `/opt/sentinel/source` and check out a reviewed commit
+SHA rather than an unpinned moving branch:
+
+```bash
+git clone https://github.com/bgray73/sentinel-lab.git /opt/sentinel/source
+cd /opt/sentinel/source
+git checkout --detach REVIEWED_COMMIT_SHA
+bash deploy/sentinel/install-sentinel-native.sh
+```
+
+The installer runs the test suite and production build, creates the restricted
+`sentinel` service account, installs a versioned release, writes a hardened
+systemd unit, and leaves the service stopped on its first run.
+
+## 3. Configure read-only Proxmox access
+
+Create a dedicated Proxmox API token with `PVEAuditor` at `/`. Do not reuse a
+root credential or a recovery-drill token. Edit `/etc/sentinel/sentinel.env`:
+
+```ini
+PVE_URL=https://PVE_MANAGEMENT_ADDRESS:8006/api2/json
+PVE_TOKEN_ID=sentinel@pve!readonly
+PVE_TOKEN_SECRET_FILE=/etc/sentinel/secrets/pve-token
+```
+
+Write only the token value to `/etc/sentinel/secrets/pve-token`, then set:
+
+```bash
+chown root:sentinel /etc/sentinel/secrets/pve-token
+chmod 0640 /etc/sentinel/secrets/pve-token
+```
+
+Trust the Proxmox certificate chain with `NODE_EXTRA_CA_CERTS` when a private CA
+is used. Do not disable TLS verification.
+
+## 4. Start and validate
+
+The native environment binds Sentinel to `127.0.0.1:4100`. Start it and run the
+read-only validation:
+
+```bash
+systemctl start sentinel.service
+bash /opt/sentinel/source/deploy/sentinel/validate-sentinel-native.sh
+```
+
+For the pilot, reach it from a workstation through an SSH tunnel:
+
+```bash
+ssh -L 4100:127.0.0.1:4100 root@sentinel01
+```
+
+Then open `http://127.0.0.1:4100`. Keep `SENTINEL_AUTH_MODE=disabled` only while
+the service is loopback-only. Before direct LAN access, place it behind the
+planned authenticated Caddy/Authentik ingress, bind to the approved LXC address,
+and restrict the LXC firewall to the proxy source.
+
+Validate simulated inventory first. Then request live read-only inventory and
+compare node, VM, and LXC counts with the Proxmox UI. Confirm
+`/api/workloads/actions/status` reports `enabled:false`.
+
+## 5. Upgrade and rollback
+
+Upgrade only to a reviewed commit or tag from a clean source checkout:
+
+```bash
+cd /opt/sentinel/source
+SENTINEL_REF=REVIEWED_COMMIT_SHA \
+  bash deploy/sentinel/upgrade-sentinel-native.sh
+```
+
+Each upgrade keeps the prior release. To swap back and health-check it:
+
+```bash
+bash /opt/sentinel/source/deploy/sentinel/rollback-sentinel-native.sh
+```
+
+The rollback script restores the original release automatically if the previous
+release fails its health check. Release directories are retained; cleanup is a
+separate reviewed maintenance task.
+
+## 6. Persistence and recovery
+
+Back up `/var/lib/sentinel` and protect `/etc/sentinel` as secret-bearing
+configuration. Include the LXC in PBS once PBS storage and restore testing are
+available. A snapshot is useful before an upgrade but is not an off-host backup.
+
+Keep Jev, notifications, recovery drills, ServiceNow writes, network incident
+automation, and Docker lifecycle actions disabled until the read-only pilot is
+stable and each capability is enabled separately.
