@@ -26,6 +26,12 @@ ENV NODE_ENV=production \
     SENTINEL_HARDWARE_OPERATIONS_FILE=/var/lib/sentinel/hardware-operations.json \
     SENTINEL_AUTH_AUDIT_FILE=/var/lib/sentinel/security-audit.json \
     SENTINEL_COLLECTOR_FILE=/var/lib/sentinel/collectors.json \
+    SENTINEL_PBS_FILE=/var/lib/sentinel/pbs-health.json \
+    SENTINEL_NETWORK_FILE=/var/lib/sentinel/network.json \
+    SENTINEL_GUEST_DRILL_FILE=/var/lib/sentinel/guest-recovery-drills.json \
+    SENTINEL_PROXMOX_OPERATIONS_FILE=/var/lib/sentinel/proxmox-operations.json \
+    SENTINEL_RECOVERY_DRILL_FILE=/var/lib/sentinel/recovery-drills.json \
+    SENTINEL_SERVICENOW_CMDB_FILE=/var/lib/sentinel/servicenow-cmdb.json \
     SENTINEL_BACKUP_DIR=/var/lib/sentinel/backups \
     SENTINEL_RESTORE_POINT_DIR=/var/lib/sentinel/restore-points
 WORKDIR /app
